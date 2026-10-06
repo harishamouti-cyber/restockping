@@ -1,9 +1,9 @@
 import { vitePlugin as remix } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
 
-// Related: https://github.com/remix-run/remix/issues/2835#issuecomment-1144102176
-// Replace \$connect with \$connect-fallback in polaris styles if needed
 export default defineConfig({
   server: {
     port: Number(process.env.PORT || 3000),
@@ -18,7 +18,9 @@ export default defineConfig({
     },
   },
   css: {
-    postcss: {},
+    postcss: {
+      plugins: [tailwindcss, autoprefixer],
+    },
   },
   plugins: [
     remix({
