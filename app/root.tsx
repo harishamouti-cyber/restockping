@@ -101,7 +101,7 @@ export function ErrorBoundary() {
         <div style={{ maxWidth: "600px", margin: "2rem auto", background: "#fff", padding: "2rem", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
           <h2 style={{ fontSize: "1.25rem", color: "#d72c0d", margin: "0 0 1rem 0" }}>RestockPing Notification</h2>
           <p style={{ margin: "0 0 1rem 0", fontWeight: 500 }}>{errorMessage}</p>
-          {errorDetails && (
+          {errorDetails && errorDetails !== "{}" && (
             <pre style={{ background: "#f1f2f3", padding: "1rem", borderRadius: "4px", fontSize: "0.85rem", overflowX: "auto", maxHeight: "250px" }}>
               {errorDetails}
             </pre>
