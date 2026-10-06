@@ -7,7 +7,16 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
-export const MONTHLY_PLAN = "RestockPing Pro Plan";
+export const BILLING_CONFIG = {
+  "RestockPing Pro": {
+    amount: 9.99,
+    currencyCode: "USD",
+    interval: BillingInterval.Every30Days,
+    trialDays: 7,
+  },
+} as const;
+
+export const MONTHLY_PLAN = "RestockPing Pro";
 
 const resolvedAppUrl =
   process.env.SHOPIFY_APP_URL ||
@@ -49,10 +58,28 @@ const shopify = shopifyApp({
     unstable_newEmbeddedAuthStrategy: true,
     removeRest: true,
   },
-  ...(process.env.SHOP_CUSTOM_DOMAIN
-    ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
-    : {}),
+  customShopDomains: process.env.SHOP_CUSTOM_DOMAIN
+    ? [process.env.SHOP_CUSTOM_DOMAIN]
+    : undefined,
 });
+
+export const requireAppSubscription = async (request: Request) => {
+  const { billing, session } = await authenticate.admin(request);
+  const isTest =
+    process.env.NODE_ENV !== "production" ||
+    session.shop.includes("myshopify.com") ||
+    session.shop.includes("test");
+
+  await billing.require({
+    plans: [MONTHLY_PLAN],
+    isTest,
+    onFailure: async () =>
+      billing.request({
+        plan: MONTHLY_PLAN,
+        isTest,
+      }),
+  });
+};
 
 export default shopify;
 export const apiVersion = ApiVersion.October24;

@@ -50,9 +50,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     case "APP_UNINSTALLED": {
       console.log(`[App Uninstalled] Cleaning active sessions for shop: ${shop}`);
-      if (session) {
-        await db.session.deleteMany({ where: { shop } });
-      }
+      await db.session.deleteMany({ where: { shop } });
       return new Response(null, { status: 200 });
     }
 
@@ -61,24 +59,16 @@ export async function action({ request }: ActionFunctionArgs) {
       const customerEmail = payload.customer?.email;
       console.log(`[GDPR Data Request] for customer: ${customerEmail}`);
 
-      let subscriptions: unknown[] = [];
-      if (customerEmail) {
-        subscriptions = await db.restockSubscription.findMany({
-          where: { shop, customerEmail },
-        });
-      }
+      const userSubscriptions = customerEmail
+        ? await db.restockSubscription.findMany({
+            where: { shop, customerEmail },
+          })
+        : [];
 
-      return new Response(
-        JSON.stringify({
-          shop,
-          customer: payload.customer,
-          records: subscriptions,
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ subscriptions: userSubscriptions }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     case "CUSTOMERS_REDACT": {
@@ -94,12 +84,10 @@ export async function action({ request }: ActionFunctionArgs) {
 
     case "SHOP_REDACT": {
       console.log(`[GDPR Shop Redact] Purging all records for shop: ${shop}`);
-      await Promise.all([
-        db.restockSubscription.deleteMany({ where: { shop } }),
-        db.inventoryItemMapping.deleteMany({ where: { shop } }),
-        db.restockSettings.deleteMany({ where: { shop } }),
-        db.session.deleteMany({ where: { shop } }),
-      ]);
+      await db.restockSubscription.deleteMany({ where: { shop } });
+      await db.inventoryItemMapping.deleteMany({ where: { shop } });
+      await db.restockSettings.deleteMany({ where: { shop } });
+      await db.session.deleteMany({ where: { shop } });
       return new Response(null, { status: 200 });
     }
 

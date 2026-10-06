@@ -1,10 +1,10 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "bb3d7694aa9a53e849de71dc2f2806fa"
-name = "RestockPing: Back in Stock"
+name = "RestockPing"
 application_url = "https://restockping.vercel.app"
 embedded = true
-handle = "restockping-back-in-stock"
+handle = "restockping"
 
 [build]
 automatically_update_urls_on_dev = true

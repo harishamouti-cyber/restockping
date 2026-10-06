@@ -1,0 +1,21 @@
+<svg width="1200" height="1200" viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Solid Emerald Background Tile (Shopify applies corner radius) -->
+  <rect width="1200" height="1200" fill="#008060" />
+  <!-- Centered RestockPing Vector Mark with 30% Safe Padding Margin -->
+  <g transform="translate(312, 312) scale(24)">
+    <path
+      d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C15.3011 3 18.1884 4.77916 19.7542 7.42857"
+      stroke="#ffffff"
+      stroke-width="1.75"
+      stroke-linecap="round"
+    />
+    <path
+      d="M21 3V7.5H16.5"
+      stroke="#ffffff"
+      stroke-width="1.75"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="12" cy="12" r="3" fill="#ffffff" />
+  </g>
+</svg>

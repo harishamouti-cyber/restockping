@@ -125,10 +125,9 @@ export default function AppLayout() {
     <AppProvider i18n={enTranslations}>
       <ui-nav-menu>
         <Link to="/app" rel="home">
-          Dashboard
+          Overview
         </Link>
-        <Link to="/app/subscribers">Waitlist Subscribers</Link>
-        <Link to="/app/simulation">Simulation Lab</Link>
+        <Link to="/app/subscribers">Subscribers</Link>
         <Link to="/app/settings">Settings</Link>
       </ui-nav-menu>
       <Outlet />

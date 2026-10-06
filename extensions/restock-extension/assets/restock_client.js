@@ -40,13 +40,13 @@
       variantId = String(v.id);
       variantTitle = v.title || 'Selected';
       price = v.price ? (v.price / 100).toFixed(2) : '0.0';
-      setVisible(!v.available);
+      setVisible(v.available === false);
     }
 
     document.addEventListener('theme:variant:change', e => onVariant(e.detail && e.detail.variant));
     document.addEventListener('variant:change', e => onVariant(e.detail && e.detail.variant));
 
-    document.querySelectorAll('select[name="id"], input[name="id"]').forEach(el => {
+    document.querySelectorAll('form[action*="/cart/add"] [name="id"], select[name="id"], input[name="id"]').forEach(el => {
       el.addEventListener('change', e => {
         const id = e.target.value;
         if (!id) return;

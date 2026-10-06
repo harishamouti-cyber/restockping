@@ -2,26 +2,10 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
 import { useState } from "react";
-import {
-  Page,
-  Layout,
-  Card,
-  FormLayout,
-  TextField,
-  Button,
-  BlockStack,
-  Text,
-  Banner,
-  Divider,
-  InlineStack,
-  Badge,
-  Box,
-  List,
-} from "@shopify/polaris";
-import { PlayIcon, MagicIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { triggerFifoRestockDispatch } from "../services/restockDispatcher.server";
+import { AppHeader } from "../components/AppHeader";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -45,18 +29,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  const sampleSubscriptions = await db.restockSubscription.findMany({
-    where: { shop, status: "PENDING" },
-    take: 5,
-    orderBy: { createdAt: "desc" },
-  });
-
   return json({
     shop,
     settings,
     pendingCount,
-    sampleSubscriptions,
-    targetVariantId: targetVariantId || "",
     prefilledInventoryItemId,
   });
 }
@@ -66,50 +42,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
-
-  if (intent === "seed_sample_subscribers") {
-    // Seed 5 realistic pending subscribers for simulation testing
-    const sampleEmails = [
-      "alex.morgan@example.com",
-      "sarah.connor@example.com",
-      "marcus.wright@example.com",
-      "elena.rostova@example.com",
-      "david.kim@example.com",
-    ];
-
-    const variantId = "48192837492";
-    const inventoryItemId = "inv_sample_987";
-    const productTitle = "Aerospace Titanium Chronograph";
-    const variantTitle = "Matte Black / 42mm";
-    const priceSnapshot = 249.0;
-
-    for (let i = 0; i < sampleEmails.length; i++) {
-      const email = sampleEmails[i];
-      // Offset timestamps slightly to demonstrate FIFO order
-      const createdAt = new Date(Date.now() - (sampleEmails.length - i) * 60000);
-
-      await db.restockSubscription.create({
-        data: {
-          shop,
-          customerEmail: email,
-          productId: "prod_sample_123",
-          variantId,
-          inventoryItemId,
-          productTitle,
-          variantTitle,
-          priceSnapshot,
-          status: "PENDING",
-          createdAt,
-        },
-      });
-    }
-
-    return json({
-      success: true,
-      seeded: true,
-      message: "Seeded 5 simulated pending waitlist subscribers in chronological FIFO order.",
-    });
-  }
 
   if (intent === "run_simulation") {
     const inventoryItemId = String(formData.get("inventoryItemId") || "inv_sample_987").trim();
@@ -131,21 +63,17 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SimulationLabPage() {
-  const { settings, pendingCount, prefilledInventoryItemId } =
+  const { settings, pendingCount, prefilledInventoryItemId, shop } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isRunning = navigation.state === "submitting";
 
-  const [availableUnits, setAvailableUnits] = useState("2");
+  const [availableUnits, setAvailableUnits] = useState("4");
   const [inventoryItemId, setInventoryItemId] = useState(
     prefilledInventoryItemId || "inv_sample_987"
   );
-
-  function handleSeedSubscribers() {
-    submit({ intent: "seed_sample_subscribers" }, { method: "post" });
-  }
 
   function handleRunSimulation() {
     const formData = new FormData();
@@ -156,154 +84,123 @@ export default function SimulationLabPage() {
   }
 
   const multiplier = settings?.dripBatchMultiplier ?? 2.5;
-  const calculatedCohort = Math.round(Number(availableUnits || 0) * multiplier);
+  const units = Number(availableUnits) || 0;
+  const calculatedBatchSize = Math.round(units * multiplier);
 
   const simResult =
     actionData && "simulationResult" in actionData
       ? actionData.simulationResult
       : null;
-  const infoMessage =
-    actionData && "message" in actionData ? actionData.message : null;
 
   return (
-    <Page
-      title="Restock Simulation & FIFO Test Lab"
-      subtitle="Safely simulate inventory restocks to verify queue cohort batching and 1-Click checkout links"
-      primaryAction={{
-        content: "Simulate Inventory Restock",
-        icon: PlayIcon,
-        loading: isRunning,
-        onAction: handleRunSimulation,
-      }}
-      secondaryActions={[
-        {
-          content: "Seed 5 Test Subscribers",
-          icon: MagicIcon,
-          onAction: handleSeedSubscribers,
-        },
-      ]}
-    >
-      <BlockStack gap="500">
-        {infoMessage && (
-          <Banner title={infoMessage} tone="info" />
-        )}
+    <div className="min-h-screen bg-zinc-50/50 flex flex-col font-sans">
+      <AppHeader currentPageTitle="Diagnostics & Queue Simulation" shop={shop} />
 
+      <main className="flex-1 max-w-4xl w-full mx-auto p-6 space-y-6">
+        {/* Diagnostic Simulator Container */}
+        <div className="bg-white border border-zinc-200/80 rounded-xl shadow-xs p-6 space-y-6">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">
+              FIFO Mathematical Queue Dry Run
+            </h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Simulate warehouse replenishment events to verify batch multipliers, pacing windows, and 1-Click checkout links without altering live catalog stock.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-700">Restocked Available Units</label>
+              <input
+                type="number"
+                min="1"
+                value={availableUnits}
+                onChange={(e) => setAvailableUnits(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+              />
+              <span className="text-[11px] text-zinc-400 block">
+                Simulated units delivered to warehouse
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-700">Inventory Item ID</label>
+              <input
+                type="text"
+                value={inventoryItemId}
+                onChange={(e) => setInventoryItemId(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+              />
+              <span className="text-[11px] text-zinc-400 block">
+                Current active pending in queue: <strong className="text-zinc-700 font-mono">{pendingCount}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* High-Contrast Monospaced Diagnostic Panel */}
+          <div className="p-4 bg-zinc-900 text-zinc-100 rounded-xl font-mono text-xs space-y-2 border border-zinc-800">
+            <div className="text-zinc-400">// FIFO Mathematical Queue Output</div>
+            <div className="flex justify-between">
+              <span>Replenished Units:</span>
+              <span className="text-emerald-400 font-bold">{units} units</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Configured Multiplier:</span>
+              <span>{multiplier}x</span>
+            </div>
+            <div className="flex justify-between border-t border-zinc-800 pt-2 font-semibold">
+              <span>Target Cohort Dispatch Size:</span>
+              <span className="text-emerald-400">{calculatedBatchSize} subscribers</span>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={handleRunSimulation}
+              disabled={isRunning}
+              className="px-4 py-2 text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 rounded-lg transition-all shadow-xs cursor-pointer border-0"
+            >
+              {isRunning ? "Simulating Queue..." : "Execute FIFO Dry Run"}
+            </button>
+          </div>
+        </div>
+
+        {/* Live Simulation Results */}
         {simResult && (
-          <Banner
-            title={`FIFO Batch Dispatch Complete: ${simResult.dispatchedCount} Subscribers Notified`}
-            tone="success"
-          >
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd">
-                <b>Formula Execution:</b> Target Alerts = min(round({simResult.availableUnits} units × {simResult.multiplier}), {simResult.targetAlerts + simResult.remainingPending} pending) = <b>{simResult.targetAlerts} alerts</b>.
-              </Text>
-              <Text as="p" variant="bodyMd">
-                <b>Batch Number:</b> #{simResult.batchId} &bull; <b>Remaining in Queue:</b> {simResult.remainingPending} subscribers.
-              </Text>
-              {simResult.permalinksGenerated.length > 0 && (
-                <Box paddingBlockStart="200">
-                  <Text as="h4" variant="headingSm">
-                    Generated 1-Click Cart Permalinks:
-                  </Text>
-                  <List type="bullet">
-                    {simResult.permalinksGenerated.map((link: string, idx: number) => (
-                      <List.Item key={idx}>
-                        <a href={link} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all" }}>
-                          {link}
-                        </a>
-                      </List.Item>
-                    ))}
-                  </List>
-                </Box>
-              )}
-            </BlockStack>
-          </Banner>
+          <div className="p-5 bg-emerald-50 border border-emerald-200/80 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-emerald-900">
+                ✓ Simulation Execution Complete: {simResult.dispatchedCount} Dispatches Processed
+              </span>
+              <span className="text-xs font-mono text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded">
+                Batch #{simResult.batchId}
+              </span>
+            </div>
+            <p className="text-xs text-emerald-800">
+              Formula Execution: min(round({simResult.availableUnits} units × {simResult.multiplier}),{" "}
+              {simResult.targetAlerts + simResult.remainingPending} pending) = <strong>{simResult.targetAlerts} alerts</strong>.
+              Remaining in queue: <strong>{simResult.remainingPending}</strong>.
+            </p>
+            {simResult.permalinksGenerated?.length > 0 && (
+              <div className="pt-2 border-t border-emerald-200">
+                <span className="text-xs font-semibold text-emerald-900 block mb-1">
+                  Generated 1-Click Permalinks:
+                </span>
+                <ul className="space-y-1 text-[11px] font-mono text-emerald-800">
+                  {simResult.permalinksGenerated.map((link: string, idx: number) => (
+                    <li key={idx} className="truncate">
+                      <a href={link} target="_blank" rel="noreferrer" className="underline hover:text-emerald-950">
+                        {link}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
-
-        <Layout>
-          <Layout.Section variant="oneHalf">
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Simulation Parameters
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Test the exact FIFO drip algorithm without modifying real warehouse stock levels.
-                </Text>
-                <Divider />
-
-                <FormLayout>
-                  <TextField
-                    label="Restocked Available Units"
-                    type="number"
-                    value={availableUnits}
-                    onChange={setAvailableUnits}
-                    helpText="Simulated quantity reported replenished."
-                    autoComplete="off"
-                  />
-                  <TextField
-                    label="Inventory Item ID"
-                    value={inventoryItemId}
-                    onChange={setInventoryItemId}
-                    helpText="Target inventory item mapping identifier."
-                    autoComplete="off"
-                  />
-                  <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodySm">
-                        Configured Drip Multiplier:
-                      </Text>
-                      <Badge tone="info">{`${multiplier}x`}</Badge>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodySm">
-                        Calculated Target Batch Size:
-                      </Text>
-                      <Badge tone="attention">{`${calculatedCohort} subscribers`}</Badge>
-                    </InlineStack>
-                  </Box>
-                </FormLayout>
-
-                <InlineStack gap="300">
-                  <Button variant="primary" icon={PlayIcon} onClick={handleRunSimulation} loading={isRunning}>
-                    Execute Simulation Run
-                  </Button>
-                  <Button icon={MagicIcon} onClick={handleSeedSubscribers}>
-                    Seed Test Subscribers
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-
-          <Layout.Section variant="oneHalf">
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  FIFO Queue Mechanics
-                </Text>
-                <Text as="p" variant="bodyMd">
-                  RestockPing uses a First-In, First-Out (FIFO) queue with proportional capacity multipliers:
-                </Text>
-                <List type="number">
-                  <List.Item>
-                    <b>Chronological Ordering:</b> The customer who registered first receives the alert first.
-                  </List.Item>
-                  <List.Item>
-                    <b>Anti-Burnout Drip:</b> If 4 units arrive and multiplier is 2.5x, RestockPing alerts exactly 10 subscribers—not all 500 on the waitlist.
-                  </List.Item>
-                  <List.Item>
-                    <b>Pacing Window:</b> A configurable cool-down interval ensures the first cohort has adequate time to claim units before the next cohort is notified.
-                  </List.Item>
-                  <List.Item>
-                    <b>1-Click Conversion:</b> Emails bypass product listings and take buyers directly into pre-populated checkouts with auto-applied discount codes.
-                  </List.Item>
-                </List>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
-    </Page>
+      </main>
+    </div>
   );
 }
