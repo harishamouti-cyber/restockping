@@ -70,6 +70,25 @@ export function ErrorBoundary() {
   let errorDetails = "";
 
   if (isRouteErrorResponse(error)) {
+    if (
+      typeof error.data === "string" &&
+      (error.data.includes("<script") ||
+        error.data.includes("Handling response") ||
+        error.data.includes("shopifycloud"))
+    ) {
+      return (
+        <html lang="en">
+          <head>
+            <meta charSet="utf-8" />
+            <meta name="viewport" content="width=device-width,initial-scale=1" />
+          </head>
+          <body>
+            <div dangerouslySetInnerHTML={{ __html: error.data }} />
+            <Scripts />
+          </body>
+        </html>
+      );
+    }
     errorMessage = `${error.status} ${error.statusText || ""}`.trim();
     errorDetails = typeof error.data === "string" ? error.data : JSON.stringify(error.data, null, 2);
   } else if (error instanceof Error) {
@@ -77,8 +96,11 @@ export function ErrorBoundary() {
     errorDetails = error.stack || "";
   } else if (typeof error === "object" && error !== null) {
     const errObj = error as Record<string, any>;
-    errorMessage = errObj.message || errObj.statusText || "Application Error";
-    errorDetails = errObj.stack || JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+    errorMessage = errObj.message || errObj.statusText || "Application Notice";
+    const details = errObj.stack || JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+    if (details && details !== "{}" && details !== "[]") {
+      errorDetails = details;
+    }
   } else if (typeof error === "string") {
     errorMessage = error;
   }

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { Form, useActionData, useLoaderData } from "@remix-run/react";
+import { json, type ActionFunctionArgs, type HeadersFunction, type LoaderFunctionArgs } from "@remix-run/node";
+import { Form, useActionData, useLoaderData, useRouteError } from "@remix-run/react";
 import {
   AppProvider as PolarisAppProvider,
   Button,
@@ -14,7 +14,16 @@ import {
 } from "@shopify/polaris";
 import polarisTranslations from "@shopify/polaris/locales/en.json";
 import { login } from "../shopify.server";
-import { LoginErrorType } from "@shopify/shopify-app-remix/server";
+import { LoginErrorType, boundary } from "@shopify/shopify-app-remix/server";
+
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const loginErrors = await login(request);
@@ -26,7 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     errors.shop = "Please enter a valid shop domain to log in";
   }
 
-  return json({ errors, polarisTranslations });
+  return json({ errors });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -49,7 +58,7 @@ export default function AuthLogin() {
   const errors = actionData?.errors || loaderData?.errors || {};
 
   return (
-    <PolarisAppProvider i18n={loaderData.polarisTranslations}>
+    <PolarisAppProvider i18n={polarisTranslations}>
       <Page narrowWidth>
         <Box paddingBlockStart="800">
           <Card>

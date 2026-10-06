@@ -1,4 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { useRouteError } from "@remix-run/react";
 import { authenticate, login } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-remix/server";
 
@@ -15,4 +16,7 @@ export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
 
-export const ErrorBoundary = boundary.error;
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
