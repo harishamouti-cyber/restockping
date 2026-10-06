@@ -9,8 +9,17 @@ import prisma from "./db.server";
 
 export const MONTHLY_PLAN = "RestockPing Pro Plan";
 
+const resolvedAppUrl =
+  process.env.SHOPIFY_APP_URL ||
+  process.env.APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://restockping.vercel.app");
+
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY,
+  apiKey: process.env.SHOPIFY_API_KEY || "bb3d7694aa9a53e849de71dc2f2806fa",
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.October24,
   scopes: process.env.SCOPES?.split(",") || [
@@ -20,7 +29,7 @@ const shopify = shopifyApp({
     "write_inventory",
     "read_themes",
   ],
-  appUrl: process.env.SHOPIFY_APP_URL || "",
+  appUrl: resolvedAppUrl,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
