@@ -147,10 +147,10 @@ export default function RestockOverview() {
                 Potential Waitlist Revenue
               </span>
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200">
-                  {velocity.label === "First Cohort Baseline" ? "First Request Recorded" : velocity.label}
+                <span className="inline-flex items-center text-[11px] font-mono font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200 whitespace-nowrap">
+                  First Request
                 </span>
-                <svg className="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-4 h-4 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                 </svg>
               </div>
@@ -170,10 +170,10 @@ export default function RestockOverview() {
                 Customers Waiting
               </span>
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200">
-                  {metrics.pendingCount} {metrics.pendingCount === 1 ? "customer waiting" : "customers waiting"}
+                <span className="inline-flex items-center text-[11px] font-mono font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 whitespace-nowrap">
+                  Queue Ready
                 </span>
-                <svg className="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-4 h-4 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
                 </svg>
               </div>
@@ -193,14 +193,14 @@ export default function RestockOverview() {
                 Recovered Sales
               </span>
               <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded border ${
+                <span className={`inline-flex items-center text-[11px] font-mono font-medium px-2 py-0.5 rounded border whitespace-nowrap ${
                   metrics.isCtrActive
-                    ? "text-emerald-700 bg-emerald-50 border-emerald-200/60 font-mono"
+                    ? "text-emerald-700 bg-emerald-50 border-emerald-200/60"
                     : "text-zinc-600 bg-zinc-100 border-zinc-200"
                 }`}>
                   {metrics.isCtrActive ? metrics.ctrBadgeLabel : "No alerts sent yet"}
                 </span>
-                <svg className="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-4 h-4 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
               </div>
@@ -214,24 +214,34 @@ export default function RestockOverview() {
           </div>
         </div>
 
-        {/* Replaced Formula Card: Human-Friendly Live Preview */}
-        <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between mb-2">
+        {/* Visual Calculation Chips: Live Preview */}
+        <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
             <h3 className="text-xs font-mono uppercase tracking-wider font-semibold text-zinc-700">
               How Your Alerts Will Send (Live Preview)
             </h3>
-            <span className="text-[11px] font-mono text-zinc-400">Automatic Calculation</span>
+            <span className="text-[11px] font-mono text-zinc-400">Automatic Pacing Logic</span>
           </div>
-          <div className="p-3.5 bg-zinc-50 border border-zinc-200/70 rounded-lg text-xs text-zinc-700 leading-relaxed">
-            If you restock <strong>4 units</strong> of a sold-out item, RestockPing will notify{" "}
-            <strong className="text-emerald-700 font-semibold font-mono">
-              {calculatedBatch} {calculatedBatch === 1 ? "customer" : "customers"}
-            </strong>{" "}
-            immediately.{" "}
-            <span className="text-zinc-500">
-              (We pace notifications at {multiplier}x your inventory to give shoppers a fair chance to buy before items sell out again).
+          
+          {/* Visual Flow Formula Chips */}
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-50 border border-zinc-200/70 rounded-lg text-xs font-mono">
+            <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-zinc-800 font-semibold shadow-xs">
+              4 Units Restocked
+            </span>
+            <span className="text-zinc-400 font-bold">×</span>
+            <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-zinc-800 font-semibold shadow-xs">
+              {multiplier}x Batch Multiplier
+            </span>
+            <span className="text-zinc-400 font-bold">→</span>
+            <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold rounded-md shadow-xs flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Notifies {calculatedBatch} {calculatedBatch === 1 ? "Customer" : "Customers"} Immediately
             </span>
           </div>
+
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            We pace alerts proportionally to available inventory so multiple customers don't rush the site for the same item and encounter an instant restock outage.
+          </p>
         </div>
 
         {/* Automated Restock Journey (Step Cards) */}
