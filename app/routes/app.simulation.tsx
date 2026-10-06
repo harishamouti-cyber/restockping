@@ -2,10 +2,10 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
 import { useState } from "react";
+import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { triggerFifoRestockDispatch } from "../services/restockDispatcher.server";
-import { AppHeader } from "../components/AppHeader";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -63,7 +63,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SimulationLabPage() {
-  const { settings, pendingCount, prefilledInventoryItemId, shop } =
+  const { settings, pendingCount, prefilledInventoryItemId } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
@@ -93,17 +93,17 @@ export default function SimulationLabPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-zinc-50/50 flex flex-col font-sans">
-      <AppHeader currentPageTitle="Diagnostics & Queue Simulation" shop={shop} />
+    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
+      <TitleBar title="FIFO Queue Simulation & Diagnostics" />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-6 space-y-6">
+      <main className="max-w-4xl mx-auto px-6 py-6 space-y-6">
         {/* Diagnostic Simulator Container */}
         <div className="bg-white border border-zinc-200/80 rounded-xl shadow-xs p-6 space-y-6">
           <div>
             <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">
               FIFO Mathematical Queue Dry Run
             </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
+            <p className="text-xs text-zinc-400 mt-0.5">
               Simulate warehouse replenishment events to verify batch multipliers, pacing windows, and 1-Click checkout links without altering live catalog stock.
             </p>
           </div>
@@ -116,7 +116,7 @@ export default function SimulationLabPage() {
                 min="1"
                 value={availableUnits}
                 onChange={(e) => setAvailableUnits(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
               />
               <span className="text-[11px] text-zinc-400 block">
                 Simulated units delivered to warehouse
@@ -129,7 +129,7 @@ export default function SimulationLabPage() {
                 type="text"
                 value={inventoryItemId}
                 onChange={(e) => setInventoryItemId(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
               />
               <span className="text-[11px] text-zinc-400 block">
                 Current active pending in queue: <strong className="text-zinc-700 font-mono">{pendingCount}</strong>

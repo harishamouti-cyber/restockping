@@ -93,6 +93,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
     default:
       console.warn(`[Unhandled Webhook Topic]: ${topic}`);
-      return new Response("Unhandled webhook topic", { status: 404 });
+      return new Response("Unhandled webhook", { status: 200 });
   }
 }

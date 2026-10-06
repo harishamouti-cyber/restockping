@@ -1,54 +1,94 @@
 {% comment %}
   RestockPing Native Notification Trigger
   Pre-allocated bounding box guarantees 0.00 Cumulative Layout Shift (CLS)
+  Inherits Dawn CSS variables for full theme harmony
 {% endcomment %}
 
-{% assign current_variant = product.selected_or_first_available_variant %}
-
-<div 
+<div
   class="restockping-wrapper"
   data-restockping-root
   data-product-id="{{ product.id }}"
   data-product-title="{{ product.title | escape }}"
-  data-selected-variant-id="{{ current_variant.id }}"
-  data-selected-variant-title="{{ current_variant.title | escape }}"
-  data-selected-variant-price="{{ current_variant.price | divided_by: 100.0 }}"
-  data-selected-variant-available="{% if current_variant.available %}true{% else %}false{% endif %}"
+  data-selected-variant-id="{{ product.selected_or_first_available_variant.id }}"
+  data-selected-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
+  data-selected-variant-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
   data-shop-domain="{{ shop.permanent_domain }}"
   data-proxy-base="/apps/restockping"
   data-accent-color="{{ block.settings.accent_color | default: '#008060' }}"
-  style="min-height: 52px; width: 100%; margin: 12px 0; display: {% if current_variant.available %}none{% else %}block{% endif %};"
+  style="
+    min-height: 54px;
+    width: 100%;
+    margin: 1.5rem 0;
+    display: none;
+  "
 >
-  <div class="restockping-card" style="border: 1px solid #e4e4e7; border-radius: 8px; padding: 14px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-family: inherit;">
-    <div class="restockping-header" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-      <span class="restockping-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #ea580c; display: inline-block;"></span>
-      <span class="restockping-title" style="font-size: 13px; font-weight: 600; color: #18181b;">
-        {{ block.settings.heading_text | default: "Notify me when this variant restocks" }}
+  <div
+    class="restockping-card"
+    style="
+      width: 100%;
+      border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.12);
+      border-radius: var(--media-radius, 8px);
+      background-color: var(--gradient-background, #ffffff);
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03);
+      box-sizing: border-box;
+    "
+  >
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem;">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ block.settings.accent_color | default: '#008060' }}; display: inline-block;"></span>
+      <span style="font-size: 14px; font-weight: 600; color: rgb(var(--color-foreground, 18, 18, 18)); font-family: inherit;">
+        {{ block.settings.heading_text | default: "Sold out? Get notified when back in stock" }}
       </span>
     </div>
-    
-    <form class="restockping-form" style="display: flex; flex-wrap: wrap; gap: 8px;" onsubmit="return false;">
-      <input 
-        type="email" 
-        name="restock_email" 
-        placeholder="{{ block.settings.input_placeholder | default: 'Enter your email' }}"
+
+    <form class="restockping-form" style="display: flex; flex-direction: column; width: 100%; gap: 10px;" onsubmit="return false;">
+      <input
+        type="email"
+        name="restock_email"
+        placeholder="{{ block.settings.input_placeholder | default: 'Enter your email address' }}"
         required
         autocomplete="email"
-        style="flex: 1; min-width: 200px; min-height: 42px; padding: 0 12px; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;"
+        style="
+          width: 100%;
+          min-height: 44px;
+          padding: 0 12px;
+          border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.2);
+          border-radius: var(--buttons-radius, 4px);
+          background: transparent;
+          color: rgb(var(--color-foreground, 18, 18, 18));
+          font-size: 14px;
+          outline: none;
+          box-sizing: border-box;
+          font-family: inherit;
+        "
       />
-      <!-- Spam Honeypot -->
       <input type="text" name="b_identifier_hp" style="display:none !important;" tabindex="-1" autocomplete="off" />
-      
-      <button 
-        type="button" 
+
+      <button
+        type="button"
         data-restockping-submit
-        style="min-height: 42px; padding: 0 20px; background: {{ block.settings.accent_color | default: '#008060' }}; color: #ffffff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s ease; display: inline-flex; align-items: center; justify-content: center;"
+        style="
+          width: 100%;
+          min-height: 46px;
+          padding: 0 20px;
+          background-color: {{ block.settings.accent_color | default: '#008060' }};
+          color: #ffffff;
+          border: none;
+          border-radius: var(--buttons-radius, 4px);
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          cursor: pointer;
+          transition: opacity 0.2s ease, transform 0.1s ease;
+          text-transform: var(--buttons-transform, uppercase);
+          font-family: inherit;
+        "
       >
-        Notify Me
+        Notify Me When Available
       </button>
     </form>
-    
-    <div class="restockping-feedback" style="display: none; font-size: 13px; margin-top: 10px; font-weight: 500; padding: 8px 12px; border-radius: 6px;"></div>
+
+    <div class="restockping-feedback" style="display: none; font-size: 13px; margin-top: 10px; font-weight: 500; font-family: inherit;"></div>
   </div>
 </div>
 

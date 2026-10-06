@@ -1,5 +1,6 @@
-name = "RestockPing Waitlist Trigger"
+name = "Restock Waitlist Trigger"
 type = "theme"
 uid = "945f94cf-342f-6d05-42d6-1f8df3a2a5f8c270cde8"
+icon = "assets/icon.png"
 
 [settings]
