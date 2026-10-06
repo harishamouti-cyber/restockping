@@ -8,18 +8,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Basic guard (or allow setup)
   try {
-    // Check if Session table exists by performing a simple count
-    const sessionCount = await prisma.session.count().catch(() => null);
-
-    if (sessionCount !== null) {
-      return json({
-        status: "READY",
-        message: "Database tables are already synchronized and active.",
-        sessionCount,
-      });
-    }
-
-    // If tables do not exist yet in PostgreSQL, create them via raw SQL DDL
+    // Ensure all tables exist via raw SQL DDL
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "Session" (
         "id" TEXT PRIMARY KEY,
@@ -83,10 +72,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
       CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_customerEmail_idx" ON "RestockSubscription"("shop", "customerEmail");
     `);
 
+    // Verify all tables by counting
+    const sessionCount = await prisma.session.count();
+    const settingsCount = await prisma.restockSettings.count();
+    const mappingCount = await prisma.inventoryItemMapping.count();
+    const subCount = await prisma.restockSubscription.count();
+
     return json({
       status: "SUCCESS",
-      message: "Database tables created and synchronized successfully!",
+      message: "All database tables are synchronized and active.",
+      tables: {
+        sessionCount,
+        settingsCount,
+        mappingCount,
+        subCount,
+      },
     });
+
   } catch (error: unknown) {
     const err = error as Error;
     return json(
