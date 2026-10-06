@@ -32,18 +32,26 @@ export async function loader({ request }: LoaderFunctionArgs) {
     where: { shop, status: "PENDING" },
   });
 
-  // Recent simulated subscriptions
-  const sampleSubscriptions = await db.restockSubscription.findMany({
-    where: { shop },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
+  const url = new URL(request.url);
+  const targetVariantId = url.searchParams.get("variantId");
+
+  let prefilledInventoryItemId = "inv_sample_987";
+  if (targetVariantId) {
+    const matchingSub = await db.restockSubscription.findFirst({
+      where: { shop, variantId: targetVariantId },
+    });
+    if (matchingSub) {
+      prefilledInventoryItemId = matchingSub.inventoryItemId;
+    }
+  }
 
   return json({
     shop,
     settings,
     pendingCount,
     sampleSubscriptions,
+    targetVariantId: targetVariantId || "",
+    prefilledInventoryItemId,
   });
 }
 
@@ -117,14 +125,17 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SimulationLabPage() {
-  const { settings, pendingCount } = useLoaderData<typeof loader>();
+  const { settings, pendingCount, prefilledInventoryItemId } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isRunning = navigation.state === "submitting";
 
   const [availableUnits, setAvailableUnits] = useState("2");
-  const [inventoryItemId, setInventoryItemId] = useState("inv_sample_987");
+  const [inventoryItemId, setInventoryItemId] = useState(
+    prefilledInventoryItemId || "inv_sample_987"
+  );
 
   function handleSeedSubscribers() {
     submit({ intent: "seed_sample_subscribers" }, { method: "post" });
