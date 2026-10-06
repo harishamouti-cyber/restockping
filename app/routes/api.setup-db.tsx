@@ -8,9 +8,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Basic guard (or allow setup)
   try {
-    // Ensure all tables exist via raw SQL DDL
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "Session" (
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS "Session" (
         "id" TEXT PRIMARY KEY,
         "shop" TEXT NOT NULL,
         "state" TEXT NOT NULL,
@@ -19,9 +18,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "expires" TIMESTAMP(3),
         "accessToken" TEXT NOT NULL,
         "userId" BIGINT
-      );
-
-      CREATE TABLE IF NOT EXISTS "RestockSettings" (
+      )`,
+      `CREATE TABLE IF NOT EXISTS "RestockSettings" (
         "shop" TEXT PRIMARY KEY,
         "senderName" TEXT NOT NULL DEFAULT 'Fulfillment Center',
         "senderEmail" TEXT,
@@ -35,19 +33,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "emailSubjectTemplate" TEXT NOT NULL DEFAULT 'Back in Stock: {{product_title}} is ready to ship',
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS "InventoryItemMapping" (
+      )`,
+      `CREATE TABLE IF NOT EXISTS "InventoryItemMapping" (
         "inventoryItemId" TEXT PRIMARY KEY,
         "shop" TEXT NOT NULL,
         "productId" TEXT NOT NULL,
         "variantId" TEXT NOT NULL,
         "sku" TEXT,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS "InventoryItemMapping_shop_variantId_idx" ON "InventoryItemMapping"("shop", "variantId");
-
-      CREATE TABLE IF NOT EXISTS "RestockSubscription" (
+      )`,
+      `CREATE INDEX IF NOT EXISTS "InventoryItemMapping_shop_variantId_idx" ON "InventoryItemMapping"("shop", "variantId")`,
+      `CREATE TABLE IF NOT EXISTS "RestockSubscription" (
         "id" TEXT PRIMARY KEY,
         "shop" TEXT NOT NULL,
         "productId" TEXT NOT NULL,
@@ -66,11 +62,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "dispatchedAt" TIMESTAMP(3),
         "convertedAt" TIMESTAMP(3)
-      );
-      CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_variantId_status_idx" ON "RestockSubscription"("shop", "variantId", "status");
-      CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_inventoryItemId_status_idx" ON "RestockSubscription"("shop", "inventoryItemId", "status");
-      CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_customerEmail_idx" ON "RestockSubscription"("shop", "customerEmail");
-    `);
+      )`,
+      `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_variantId_status_idx" ON "RestockSubscription"("shop", "variantId", "status")`,
+      `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_inventoryItemId_status_idx" ON "RestockSubscription"("shop", "inventoryItemId", "status")`,
+      `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_customerEmail_idx" ON "RestockSubscription"("shop", "customerEmail")`,
+    ];
+
+    for (const sql of statements) {
+      await prisma.$executeRawUnsafe(sql);
+    }
 
     // Verify all tables by counting
     const sessionCount = await prisma.session.count();

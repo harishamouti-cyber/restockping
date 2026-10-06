@@ -32,51 +32,54 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } catch (dbErr) {
     console.error("Database settings upsert error, attempting self-healing schema creation:", dbErr);
     try {
-      await db.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "RestockSettings" (
-          "shop" TEXT PRIMARY KEY,
-          "senderName" TEXT NOT NULL DEFAULT 'Fulfillment Center',
-          "senderEmail" TEXT,
-          "replyToEmail" TEXT,
-          "accentColor" TEXT NOT NULL DEFAULT '#008060',
-          "dripBatchMultiplier" DOUBLE PRECISION NOT NULL DEFAULT 2.5,
-          "dripIntervalMinutes" INTEGER NOT NULL DEFAULT 120,
-          "minRestockThreshold" INTEGER NOT NULL DEFAULT 1,
-          "enableWebPush" BOOLEAN NOT NULL DEFAULT false,
-          "incentiveDiscountCode" TEXT,
-          "emailSubjectTemplate" TEXT NOT NULL DEFAULT 'Back in Stock: {{product_title}} is ready to ship',
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS "InventoryItemMapping" (
-          "inventoryItemId" TEXT PRIMARY KEY,
-          "shop" TEXT NOT NULL,
-          "productId" TEXT NOT NULL,
-          "variantId" TEXT NOT NULL,
-          "sku" TEXT,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS "RestockSubscription" (
-          "id" TEXT PRIMARY KEY,
-          "shop" TEXT NOT NULL,
-          "productId" TEXT NOT NULL,
-          "variantId" TEXT NOT NULL,
-          "inventoryItemId" TEXT NOT NULL,
-          "productTitle" TEXT NOT NULL,
-          "variantTitle" TEXT NOT NULL,
-          "priceSnapshot" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
-          "customerEmail" TEXT,
-          "pushEndpoint" TEXT,
-          "pushP256dh" TEXT,
-          "pushAuth" TEXT,
-          "channel" TEXT NOT NULL DEFAULT 'EMAIL',
-          "status" TEXT NOT NULL DEFAULT 'PENDING',
-          "dispatchBatch" INTEGER NOT NULL DEFAULT 0,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "dispatchedAt" TIMESTAMP(3),
-          "convertedAt" TIMESTAMP(3)
-        );
-      `);
+      const healStatements = [
+      `CREATE TABLE IF NOT EXISTS "RestockSettings" (
+        "shop" TEXT PRIMARY KEY,
+        "senderName" TEXT NOT NULL DEFAULT 'Fulfillment Center',
+        "senderEmail" TEXT,
+        "replyToEmail" TEXT,
+        "accentColor" TEXT NOT NULL DEFAULT '#008060',
+        "dripBatchMultiplier" DOUBLE PRECISION NOT NULL DEFAULT 2.5,
+        "dripIntervalMinutes" INTEGER NOT NULL DEFAULT 120,
+        "minRestockThreshold" INTEGER NOT NULL DEFAULT 1,
+        "enableWebPush" BOOLEAN NOT NULL DEFAULT false,
+        "incentiveDiscountCode" TEXT,
+        "emailSubjectTemplate" TEXT NOT NULL DEFAULT 'Back in Stock: {{product_title}} is ready to ship',
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS "InventoryItemMapping" (
+        "inventoryItemId" TEXT PRIMARY KEY,
+        "shop" TEXT NOT NULL,
+        "productId" TEXT NOT NULL,
+        "variantId" TEXT NOT NULL,
+        "sku" TEXT,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS "RestockSubscription" (
+        "id" TEXT PRIMARY KEY,
+        "shop" TEXT NOT NULL,
+        "productId" TEXT NOT NULL,
+        "variantId" TEXT NOT NULL,
+        "inventoryItemId" TEXT NOT NULL,
+        "productTitle" TEXT NOT NULL,
+        "variantTitle" TEXT NOT NULL,
+        "priceSnapshot" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+        "customerEmail" TEXT,
+        "pushEndpoint" TEXT,
+        "pushP256dh" TEXT,
+        "pushAuth" TEXT,
+        "channel" TEXT NOT NULL DEFAULT 'EMAIL',
+        "status" TEXT NOT NULL DEFAULT 'PENDING',
+        "dispatchBatch" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "dispatchedAt" TIMESTAMP(3),
+        "convertedAt" TIMESTAMP(3)
+      )`,
+    ];
+    for (const sql of healStatements) {
+      await db.$executeRawUnsafe(sql);
+    }
       await db.restockSettings.upsert({
         where: { shop },
         update: {},
