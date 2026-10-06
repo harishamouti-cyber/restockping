@@ -105,19 +105,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     shop.includes("myshopify.com");
 
   try {
-    await billing.require({
+    const billingStatus = await billing.check({
       plans: [MONTHLY_PLAN],
       isTest: isTestStore,
-      onFailure: async () =>
-        billing.request({
-          plan: MONTHLY_PLAN,
-          isTest: isTestStore,
-        }),
     });
+    console.log(`[Managed Billing] Shop ${shop} active payment:`, billingStatus?.hasActivePayment);
   } catch (billingErr) {
-    if (billingErr instanceof Response) {
-      throw billingErr;
-    }
     console.warn("Managed billing verification skipped or pending card activation:", billingErr);
   }
 
@@ -150,14 +143,28 @@ export function ErrorBoundary() {
   try {
     return boundary.error(error);
   } catch {
+    const errMsg =
+      error instanceof Error
+        ? error.message
+        : (error as any)?.message || (typeof error === "string" ? error : JSON.stringify(error));
     return (
       <AppProvider i18n={enTranslations}>
         <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-          <h2>RestockPing Notice</h2>
-          <p style={{ color: "#d72c0d" }}>
-            {error instanceof Error ? error.message : JSON.stringify(error)}
-          </p>
-          <a href="/app" style={{ color: "#008060" }}>Reload App</a>
+          <h2 style={{ color: "#d72c0d", marginBottom: "0.5rem" }}>RestockPing Notice</h2>
+          <p style={{ color: "#202223", marginBottom: "1rem" }}>{errMsg}</p>
+          <a
+            href="/app"
+            style={{
+              display: "inline-block",
+              background: "#008060",
+              color: "#fff",
+              padding: "0.5rem 1rem",
+              borderRadius: "4px",
+              textDecoration: "none",
+            }}
+          >
+            Reload App
+          </a>
         </div>
       </AppProvider>
     );

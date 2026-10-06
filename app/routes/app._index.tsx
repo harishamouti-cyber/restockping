@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigate } from "@remix-run/react";
+import { useLoaderData, useSubmit, useNavigate, useRouteError } from "@remix-run/react";
 import { useState } from "react";
 import {
   Page,
@@ -28,6 +28,22 @@ import {
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "ui-title-bar": any;
+    }
+  }
+}
+
+function formatCurrency(val: number): string {
+  return "$" + (val || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function formatNumber(val: number): string {
+  return (val || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
 
 export interface ReorderItem {
   id: string;
@@ -89,21 +105,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // 1. Fetch settings
-  const settings = await db.restockSettings.findUnique({ where: { shop } });
+  let settings: any = null;
+  let pendingSubscriptions: any[] = [];
+  let convertedCount = 0;
+  let dispatchedCount = 0;
 
-  // 2. Fetch pending subscriptions
-  const pendingSubscriptions = await db.restockSubscription.findMany({
-    where: { shop, status: "PENDING" },
-  });
+  try {
+    settings = await db.restockSettings.findUnique({ where: { shop } });
+  } catch (err) {
+    console.warn("Could not load settings:", err);
+  }
 
-  const convertedCount = await db.restockSubscription.count({
-    where: { shop, status: "CONVERTED" },
-  });
+  try {
+    pendingSubscriptions = await db.restockSubscription.findMany({
+      where: { shop, status: "PENDING" },
+    });
+  } catch (err) {
+    console.warn("Could not load pending subscriptions:", err);
+  }
 
-  const dispatchedCount = await db.restockSubscription.count({
-    where: { shop, status: "DISPATCHED" },
-  });
+  try {
+    convertedCount = await db.restockSubscription.count({
+      where: { shop, status: "CONVERTED" },
+    });
+  } catch (err) {
+    console.warn("Could not count converted:", err);
+  }
+
+  try {
+    dispatchedCount = await db.restockSubscription.count({
+      where: { shop, status: "DISPATCHED" },
+    });
+  } catch (err) {
+    console.warn("Could not count dispatched:", err);
+  }
 
   const totalWaitlistSubscribers = pendingSubscriptions.length;
 
@@ -415,8 +450,8 @@ export default function Dashboard() {
           </BlockStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Text as="span" variant="bodySm" fontFamily="monospace">
-            {sku}
+          <Text as="span" variant="bodySm">
+            <code>{sku}</code>
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
@@ -431,7 +466,7 @@ export default function Dashboard() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text as="span" variant="bodyMd" fontWeight="semibold">
-            ${unrealizedDemand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatCurrency(unrealizedDemand)}
           </Text>
           <Text as="span" variant="bodyXs" tone="subdued">
             {` ($${price.toFixed(2)}/unit)`}
@@ -463,8 +498,8 @@ export default function Dashboard() {
   return (
     <>
       {/* App Bridge Top Title Bar with Single Primary Action */}
-      <ui-title-bar title="Executive Demand Hub">
-        <button variant="primary" onClick={handleAddToTheme}>
+      <ui-title-bar title="Executive Demand Hub" suppressHydrationWarning>
+        <button {...{ variant: "primary" }} onClick={handleAddToTheme}>
           Add to Theme Editor
         </button>
         <button onClick={() => navigate("/app/simulation")}>Simulation Lab</button>
@@ -480,10 +515,10 @@ export default function Dashboard() {
                 Automatic micro-batch releasing protects your store from flash stock-outs. When inventory is replenished via Shopify Webhook, notifications dispatch in controlled batches proportional to stock levels.
               </Text>
               <InlineStack gap="400" blockAlign="center">
-                <Badge tone="attention">{`Multiplier: ${settings.dripBatchMultiplier}x`}</Badge>
-                <Badge tone="info">{`Cohort Cooldown: ${settings.dripIntervalMinutes} min`}</Badge>
-                <Badge tone="warning">{`Min Threshold: ${settings.minRestockThreshold} units`}</Badge>
-                <Badge tone="success">{`Incentive Coupon: ${settings.incentiveDiscountCode}`}</Badge>
+                <Badge tone="attention">{`Multiplier: ${settings?.dripBatchMultiplier ?? 2.5}x`}</Badge>
+                <Badge tone="info">{`Cohort Cooldown: ${settings?.dripIntervalMinutes ?? 120} min`}</Badge>
+                <Badge tone="warning">{`Min Threshold: ${settings?.minRestockThreshold ?? 1} units`}</Badge>
+                <Badge tone="success">{`Incentive Coupon: ${settings?.incentiveDiscountCode || "RESTOCK10"}`}</Badge>
                 <Button size="micro" url="/app/settings" icon={SettingsIcon}>
                   Configure Engine
                 </Button>
@@ -501,10 +536,7 @@ export default function Dashboard() {
                   </Text>
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="p" variant="headingXl">
-                      ${metrics.grossUnrealizedDemand.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatCurrency(metrics.grossUnrealizedDemand)}
                     </Text>
                     <Badge tone={metrics.grossUnrealizedDemand > 0 ? "success" : undefined}>
                       {metrics.grossUnrealizedDemand > 0 ? "Pending Revenue" : "Zero Backlog"}
@@ -525,7 +557,7 @@ export default function Dashboard() {
                   </Text>
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="p" variant="headingXl">
-                      {metrics.totalWaitlistSubscribers.toLocaleString()}
+                      {formatNumber(metrics.totalWaitlistSubscribers)}
                     </Text>
                     <Badge tone={metrics.totalWaitlistSubscribers > 0 ? "info" : undefined}>
                       {metrics.totalWaitlistSubscribers > 0 ? "Active FIFO Queue" : "No Waitlists"}
@@ -546,10 +578,10 @@ export default function Dashboard() {
                   </Text>
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="p" variant="headingXl">
-                      {metrics.convertedCount.toLocaleString()}
+                      {formatNumber(metrics.convertedCount)}
                     </Text>
                     <Badge tone="success">
-                      {`${metrics.dispatchedCount} Dispatched`}
+                      {`${formatNumber(metrics.dispatchedCount)} Dispatched`}
                     </Badge>
                   </InlineStack>
                   <Text as="p" variant="bodyXs" tone="subdued">
@@ -1155,5 +1187,26 @@ export default function Dashboard() {
         </BlockStack>
       </Page>
     </>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const errMsg =
+    error instanceof Error
+      ? error.message
+      : (error as any)?.message || (typeof error === "string" ? error : JSON.stringify(error));
+
+  return (
+    <Page fullWidth title="Executive Demand Hub">
+      <BlockStack gap="400">
+        <Banner title="Dashboard Notice" tone="warning">
+          <p>{errMsg}</p>
+          <Box paddingBlockStart="200">
+            <Button onClick={() => window.location.reload()}>Reload Dashboard</Button>
+          </Box>
+        </Banner>
+      </BlockStack>
+    </Page>
   );
 }

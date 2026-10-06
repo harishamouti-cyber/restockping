@@ -45,6 +45,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
+  const sampleSubscriptions = await db.restockSubscription.findMany({
+    where: { shop, status: "PENDING" },
+    take: 5,
+    orderBy: { createdAt: "desc" },
+  });
+
   return json({
     shop,
     settings,

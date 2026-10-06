@@ -68,12 +68,20 @@ export function ErrorBoundary() {
   let errorDetails = "";
 
   if (isRouteErrorResponse(error)) {
-    errorMessage = `${error.status} ${error.statusText}`;
-    errorDetails = typeof error.data === "string" ? error.data : JSON.stringify(error.data);
+    errorMessage = `${error.status} ${error.statusText || ""}`.trim();
+    errorDetails = typeof error.data === "string" ? error.data : JSON.stringify(error.data, null, 2);
   } else if (error instanceof Error) {
     errorMessage = error.message;
     errorDetails = error.stack || "";
+  } else if (typeof error === "object" && error !== null) {
+    const errObj = error as Record<string, any>;
+    errorMessage = errObj.message || errObj.statusText || "Application Error";
+    errorDetails = errObj.stack || JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+  } else if (typeof error === "string") {
+    errorMessage = error;
   }
+
+  const apiKey = "bb3d7694aa9a53e849de71dc2f2806fa";
 
   return (
     <html lang="en">
@@ -81,14 +89,18 @@ export function ErrorBoundary() {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>RestockPing Error Notice</title>
+        <script
+          src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+          data-api-key={apiKey}
+        />
         <Links />
       </head>
       <body style={{ fontFamily: "Inter, -apple-system, sans-serif", padding: "2rem", backgroundColor: "#f6f6f7", color: "#202223" }}>
         <div style={{ maxWidth: "600px", margin: "2rem auto", background: "#fff", padding: "2rem", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
           <h2 style={{ fontSize: "1.25rem", color: "#d72c0d", margin: "0 0 1rem 0" }}>RestockPing Notification</h2>
-          <p style={{ margin: "0 0 1rem 0" }}>{errorMessage}</p>
+          <p style={{ margin: "0 0 1rem 0", fontWeight: 500 }}>{errorMessage}</p>
           {errorDetails && (
-            <pre style={{ background: "#f1f2f3", padding: "1rem", borderRadius: "4px", fontSize: "0.85rem", overflowX: "auto" }}>
+            <pre style={{ background: "#f1f2f3", padding: "1rem", borderRadius: "4px", fontSize: "0.85rem", overflowX: "auto", maxHeight: "250px" }}>
               {errorDetails}
             </pre>
           )}
