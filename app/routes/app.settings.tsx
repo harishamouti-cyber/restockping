@@ -117,7 +117,7 @@ export default function SettingsPage() {
 
     submit(formData, { method: "POST" });
     setIsDirty(false);
-    showToast("Configuration saved successfully");
+    showToast("Settings saved successfully");
   };
 
   const handleDiscard = () => {
@@ -132,7 +132,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <ui-title-bar title="Dispatch & Branding Settings" />
+      <ui-title-bar title="Alert & Pacing Settings" />
 
       {isDirty && (
         <ui-save-bar id="settings-save-bar">
@@ -175,17 +175,17 @@ export default function SettingsPage() {
         <div className="p-6 bg-white border border-zinc-200/80 rounded-xl shadow-xs space-y-4">
           <div>
             <h2 className="text-sm font-semibold tracking-tight text-zinc-900">
-              FIFO Anti-Burnout Pacing Engine
+              Smart Alert Pacing
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Control multiplier ratio and evaluation cooldown window to prevent catalog stockout shocks.
+              Control how many notifications are sent per restocked item to prevent instant sell-outs.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-zinc-700 block mb-1">
-                Drip Batch Multiplier
+                Notification Batch Size (Multiplier)
               </label>
               <input
                 type="number"
@@ -196,13 +196,13 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-mono"
               />
               <span className="text-[11px] text-zinc-400 mt-1 block">
-                Default 2.5x of restocked units (e.g. 4 restocked = 10 notified)
+                How many alerts to send per restocked item. E.g., 2.5x means if you restock 4 units, we notify 10 customers.
               </span>
             </div>
 
             <div>
               <label className="text-xs font-medium text-zinc-700 block mb-1">
-                Cohort Cooldown Window (Minutes)
+                Pause Between Batches (Minutes)
               </label>
               <input
                 type="number"
@@ -213,7 +213,7 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-mono"
               />
               <span className="text-[11px] text-zinc-400 mt-1 block">
-                Delay before evaluating remaining stock for next cohort
+                Minutes to wait before notifying the next group of customers if items remain in stock.
               </span>
             </div>
           </div>
@@ -231,15 +231,15 @@ export default function SettingsPage() {
           </div>
 
           <ColorPickerInput
-            label="Theme Accent Color"
+            label="Button & Badge Color"
             value={formState.accentColor}
             onChange={(color) => handleChange("accentColor", color)}
-            description="Controls Storefront App Block button and status indicators"
+            description='Controls the color of your "Notify Me" buttons and status badges on product pages.'
           />
 
           <ToggleSwitch
-            label="Browser Web Push Alerts"
-            description="Enable zero-SMS-cost native browser push alerts on supported mobile and desktop browsers."
+            label="Allow Browser Push Notifications"
+            description="Let shoppers receive instant alerts on their mobile device or desktop browser with 1-click."
             checked={formState.enableWebPush}
             onChange={(checked) => handleChange("enableWebPush", checked)}
           />
@@ -253,11 +253,11 @@ export default function SettingsPage() {
                 onChange={(e) => handleChange("senderName", e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-sans"
               />
-              <span className="text-[11px] text-zinc-400 mt-1 block">Used in restock dispatch notifications</span>
+              <span className="text-[11px] text-zinc-400 mt-1 block">Shown as the sender name in restock emails</span>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-zinc-700 block mb-1">Email Subject Template</label>
+              <label className="text-xs font-medium text-zinc-700 block mb-1">Email Subject Line</label>
               <input
                 type="text"
                 value={formState.emailSubjectTemplate}

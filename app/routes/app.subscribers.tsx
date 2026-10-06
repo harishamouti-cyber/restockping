@@ -135,12 +135,12 @@ export default function SubscribersPage() {
       { intent: "BULK_DELETE", ids: JSON.stringify(ids) },
       { method: "POST" }
     );
-    showToast(`${ids.length} subscriber(s) deleted`);
+    showToast(`${ids.length} customer(s) removed`);
   };
 
   const handleDispatchSingle = (id: string) => {
     submit({ intent: "DISPATCH_SINGLE", id }, { method: "POST" });
-    showToast("Subscriber marked as dispatched");
+    showToast("Alert sent to customer");
   };
 
   const handleCopyPermalink = (sub: any) => {
@@ -154,6 +154,13 @@ export default function SubscribersPage() {
     showToast("1-Click checkout link copied to clipboard");
   };
 
+  const tabs = [
+    { id: "ALL", label: "All Customers" },
+    { id: "PENDING", label: "Waiting to Notify" },
+    { id: "DISPATCHED", label: "Alerts Sent" },
+    { id: "CONVERTED", label: "Orders Placed" },
+  ];
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
       <ui-title-bar title="Waitlist Subscribers" />
@@ -162,42 +169,42 @@ export default function SubscribersPage() {
         {/* Metric Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Total Registered</span>
+            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Total Customers</span>
             <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 tabular-nums mt-1">
               {totalCount}
             </div>
-            <p className="text-xs text-zinc-400 mt-1">All recorded storefront opt-ins</p>
+            <p className="text-xs text-zinc-400 mt-1">All recorded storefront signups</p>
           </div>
           <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Pending In FIFO Queue</span>
+            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Waiting to Notify</span>
             <div className="text-2xl font-bold font-mono tracking-tight text-amber-600 tabular-nums mt-1">
               {pendingCount}
             </div>
-            <p className="text-xs text-zinc-400 mt-1">Awaiting restock alert cohorts</p>
+            <p className="text-xs text-zinc-400 mt-1">Shoppers waiting for restock alerts</p>
           </div>
           <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Dispatched & Converted</span>
+            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Alerts Sent & Ordered</span>
             <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600 tabular-nums mt-1">
               {dispatchedCount}
             </div>
-            <p className="text-xs text-zinc-400 mt-1">Alerts successfully released</p>
+            <p className="text-xs text-zinc-400 mt-1">Alerts successfully sent to customers</p>
           </div>
         </div>
 
         {/* Filter Navigation */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 border border-zinc-200">
-            {["ALL", "PENDING", "DISPATCHED", "CONVERTED"].map((tab) => (
+            {tabs.map((tab) => (
               <button
-                key={tab}
-                onClick={() => handleStatusTab(tab)}
+                key={tab.id}
+                onClick={() => handleStatusTab(tab.id)}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
-                  statusParam === tab
+                  statusParam === tab.id
                     ? "bg-white text-zinc-900 shadow-xs"
                     : "text-zinc-600 hover:text-zinc-900"
                 }`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -221,9 +228,9 @@ export default function SubscribersPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
               </svg>
             </div>
-            <h3 className="text-sm font-semibold text-zinc-900">No Waitlist Records Found</h3>
-            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-              Shopper restock requests will appear here once visitors opt into sold-out variants on your live storefront.
+            <h3 className="text-sm font-semibold text-zinc-900">No Waitlist Customers Found</h3>
+            <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
+              Customer restock requests will appear here once visitors sign up for sold-out items on your live store.
             </p>
           </div>
         ) : (

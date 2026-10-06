@@ -103,17 +103,17 @@ export default function SimulationLabPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <ui-title-bar title="FIFO Queue Simulation & Diagnostics" />
+      <ui-title-bar title="Restock Alert Simulator" />
 
       <main className="max-w-4xl mx-auto px-6 py-6 space-y-6">
         {/* Diagnostic Simulator Container */}
         <div className="bg-white border border-zinc-200/80 rounded-xl shadow-xs p-6 space-y-6">
           <div>
             <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">
-              FIFO Mathematical Queue Dry Run
+              Smart Alert Pacing Test Run
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Simulate warehouse replenishment events to verify batch multipliers, pacing windows, and 1-Click checkout links without altering live catalog stock.
+              Simulate warehouse replenishment events to verify batch multipliers, pause windows, and 1-Click checkout links without sending live alerts to customers.
             </p>
           </div>
 
@@ -141,14 +141,14 @@ export default function SimulationLabPage() {
                 className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
               />
               <span className="text-[11px] text-zinc-400 block">
-                Current active pending in queue: <strong className="text-zinc-700 font-mono">{pendingCount}</strong>
+                Shoppers waiting to be notified: <strong className="text-zinc-700 font-mono">{pendingCount}</strong>
               </span>
             </div>
           </div>
 
           {/* High-Contrast Monospaced Diagnostic Panel */}
           <div className="p-4 bg-zinc-900 text-zinc-100 rounded-xl font-mono text-xs space-y-2 border border-zinc-800">
-            <div className="text-zinc-400">// FIFO Mathematical Queue Output</div>
+            <div className="text-zinc-400">// Notification Calculation Output</div>
             <div className="flex justify-between">
               <span>Replenished Units:</span>
               <span className="text-emerald-400 font-bold">{units} units</span>
@@ -158,8 +158,8 @@ export default function SimulationLabPage() {
               <span>{multiplier}x</span>
             </div>
             <div className="flex justify-between border-t border-zinc-800 pt-2 font-semibold">
-              <span>Target Cohort Dispatch Size:</span>
-              <span className="text-emerald-400">{calculatedBatchSize} subscribers</span>
+              <span>Target Notification Batch Size:</span>
+              <span className="text-emerald-400">{calculatedBatchSize} customers</span>
             </div>
           </div>
 
@@ -170,7 +170,7 @@ export default function SimulationLabPage() {
               disabled={isRunning}
               className="px-4 py-2 text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 rounded-lg transition-all shadow-xs cursor-pointer border-0"
             >
-              {isRunning ? "Simulating Queue..." : "Execute FIFO Dry Run"}
+              {isRunning ? "Running Simulation..." : "Execute Test Run"}
             </button>
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function SimulationLabPage() {
           <div className="p-5 bg-emerald-50 border border-emerald-200/80 rounded-xl space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-emerald-900">
-                ✓ Simulation Execution Complete: {simResult.dispatchedCount} Dispatches Processed
+                ✓ Test Run Complete: {simResult.dispatchedCount} Test Alerts Generated
               </span>
               <span className="text-xs font-mono text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded">
                 Batch #{simResult.batchId}

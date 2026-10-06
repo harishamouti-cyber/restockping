@@ -23,7 +23,7 @@ export function calculateConversionMetrics(subscribers: any[]): MetricCalculatio
       dispatchedCount: 0,
       convertedCount: 0,
       ctrPercentage: null,
-      ctrBadgeLabel: "Awaiting First Release",
+      ctrBadgeLabel: "No alerts sent yet",
       isCtrActive: false,
     };
   }
@@ -35,7 +35,7 @@ export function calculateConversionMetrics(subscribers: any[]): MetricCalculatio
     dispatchedCount,
     convertedCount,
     ctrPercentage: calculatedCtr,
-    ctrBadgeLabel: `${dispatchedCount} Dispatched (${calculatedCtr}% CTR)`,
+    ctrBadgeLabel: `${dispatchedCount} Sent (${calculatedCtr}% Conversion)`,
     isCtrActive: true,
   };
 }
@@ -61,7 +61,7 @@ export function calculateVelocityMetrics(subscribers: any[]) {
     const delta =
       ((currentPeriodDemand - previousPeriodDemand) / previousPeriodDemand) * 100;
     return {
-      label: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}% velocity`,
+      label: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}% demand growth`,
       isPositive: delta >= 0,
       hasBaseline: true,
     };
@@ -69,7 +69,7 @@ export function calculateVelocityMetrics(subscribers: any[]) {
 
   return {
     label:
-      subscribers.length > 0 ? "First Cohort Baseline" : "No Activity Recorded",
+      subscribers.length > 0 ? "First Request Recorded" : "No Activity Recorded",
     isPositive: true,
     hasBaseline: false,
   };
