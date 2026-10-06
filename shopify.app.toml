@@ -1,0 +1,41 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "restockping_client_id"
+name = "RestockPing: Back in Stock"
+handle = "restockping-back-in-stock"
+application_url = "https://restockping.vercel.app"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = ""
+
+[access_scopes]
+# Requesting minimal essential scopes: read_products, write_products, read_inventory, write_inventory, read_themes
+scopes = "read_products,write_products,read_inventory,write_inventory,read_themes"
+
+[auth]
+redirect_urls = [
+  "https://restockping.vercel.app/auth/callback",
+  "https://restockping.vercel.app/auth/shopify/callback",
+  "https://restockping.vercel.app/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/update" ]
+  uri = "/webhooks"
+
+[app_proxy]
+url = "https://restockping.vercel.app/apps/restockping"
+subpath = "restockping"
+prefix = "apps"
+
+[pos]
+embedded = false

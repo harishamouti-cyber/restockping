@@ -1,0 +1,71 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Session {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false)
+  scope       String?
+  expires     DateTime?
+  accessToken String
+  userId      BigInt?
+}
+
+model RestockSettings {
+  shop                  String   @id
+  senderName            String   @default("Fulfillment Center")
+  senderEmail           String?
+  replyToEmail          String?
+  accentColor           String   @default("#008060")
+  dripBatchMultiplier   Float    @default(2.5)
+  dripIntervalMinutes   Int      @default(120)
+  minRestockThreshold   Int      @default(1)
+  enableWebPush         Boolean  @default(false)
+  incentiveDiscountCode String?
+  emailSubjectTemplate  String   @default("Back in Stock: {{product_title}} is ready to ship")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model InventoryItemMapping {
+  inventoryItemId String   @id
+  shop            String
+  productId       String
+  variantId       String
+  sku             String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([shop, variantId])
+}
+
+model RestockSubscription {
+  id              String    @id @default(uuid())
+  shop            String
+  productId       String
+  variantId       String
+  inventoryItemId String
+  productTitle    String
+  variantTitle    String
+  priceSnapshot   Float     @default(0.0)
+  customerEmail   String?
+  pushEndpoint    String?
+  pushP256dh      String?
+  pushAuth        String?
+  channel         String    @default("EMAIL") // EMAIL | WEB_PUSH
+  status          String    @default("PENDING") // PENDING | QUEUED | DISPATCHED | CONVERTED | CANCELLED
+  dispatchBatch   Int       @default(0)
+  createdAt       DateTime  @default(now())
+  dispatchedAt    DateTime?
+  convertedAt     DateTime?
+
+  @@index([shop, variantId, status])
+  @@index([shop, inventoryItemId, status])
+  @@index([shop, customerEmail])
+}
