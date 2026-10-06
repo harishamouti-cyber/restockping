@@ -7,10 +7,8 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate, MONTHLY_PLAN } from "../shopify.server";
 import db from "../db.server";
 
-export const headers: HeadersFunction = ({ loaderHeaders }) => {
-  return {
-    "Cache-Control": loaderHeaders.get("Cache-Control") || "no-cache",
-  };
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -49,6 +47,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
         }),
     });
   } catch (billingErr) {
+    if (billingErr instanceof Response) {
+      throw billingErr;
+    }
     // If billing is not configured in local mock dev or partner store without active card,
     // allow proceeding gracefully in non-production.
     if (process.env.NODE_ENV === "production" && !isTestStore) {
@@ -82,5 +83,3 @@ export default function AppLayout() {
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }
-
-export const headersCallback = boundary.headers;

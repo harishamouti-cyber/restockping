@@ -2,17 +2,24 @@
 
 client_id = "bb3d7694aa9a53e849de71dc2f2806fa"
 name = "RestockPing: Back in Stock"
-handle = "restockping-back-in-stock"
 application_url = "https://restockping.vercel.app"
 embedded = true
+handle = "restockping-back-in-stock"
 
 [build]
 automatically_update_urls_on_dev = true
 dev_store_url = ""
 
+[webhooks]
+api_version = "2024-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks"
+  topics = [ "app/uninstalled", "inventory_levels/update" ]
+
 [access_scopes]
-# Requesting minimal essential scopes: read_products, write_products, read_inventory, write_inventory, read_themes
-scopes = "read_products,write_products,read_inventory,write_inventory,read_themes"
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_inventory,read_products,read_themes,write_inventory,write_products"
 
 [auth]
 redirect_urls = [
@@ -20,17 +27,6 @@ redirect_urls = [
   "https://restockping.vercel.app/auth/shopify/callback",
   "https://restockping.vercel.app/api/auth/callback"
 ]
-
-[webhooks]
-api_version = "2024-10"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks"
-
-  [[webhooks.subscriptions]]
-  topics = [ "inventory_levels/update" ]
-  uri = "/webhooks"
 
 [app_proxy]
 url = "https://restockping.vercel.app/apps/restockping"
