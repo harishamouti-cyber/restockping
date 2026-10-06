@@ -1,7 +1,6 @@
 import React from "react";
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useNavigate, useSubmit } from "@remix-run/react";
-import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { calculateConversionMetrics, calculateVelocityMetrics } from "../services/fifoEngine.server";
@@ -11,8 +10,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [settings, subscribers] = await Promise.all([
-    db.restockSettings.findUnique({ where: { shop } }) || {
+  try {
+    const [settingsRecord, subscribers] = await Promise.all([
+      db.restockSettings.findUnique({ where: { shop } }),
+      db.restockSubscription.findMany({
+        where: { shop },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    const settings = settingsRecord || {
       dripBatchMultiplier: 2.5,
       dripIntervalMinutes: 120,
       minRestockThreshold: 1,
@@ -20,27 +27,53 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       enableWebPush: false,
       senderName: "Fulfillment Center",
       emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
-    },
-    db.restockSubscription.findMany({
-      where: { shop },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+    };
 
-  const metrics = calculateConversionMetrics(subscribers);
-  const velocity = calculateVelocityMetrics(subscribers);
-  const totalUnrealizedDemand = subscribers
-    .filter((s) => s.status === "PENDING")
-    .reduce((sum, s) => sum + (Number(s.priceSnapshot) || 0), 0);
+    const metrics = calculateConversionMetrics(subscribers || []);
+    const velocity = calculateVelocityMetrics(subscribers || []);
+    const totalUnrealizedDemand = (subscribers || [])
+      .filter((s) => s.status === "PENDING")
+      .reduce((sum, s) => sum + (Number(s.priceSnapshot) || 0), 0);
 
-  return json({
-    shop,
-    settings,
-    metrics,
-    velocity,
-    totalUnrealizedDemand,
-    isDev: process.env.NODE_ENV !== "production",
-  });
+    return json({
+      shop,
+      settings,
+      metrics,
+      velocity,
+      totalUnrealizedDemand,
+      isDev: process.env.NODE_ENV !== "production",
+    });
+  } catch (err) {
+    console.error("[app._index loader error]:", err);
+    return json({
+      shop,
+      settings: {
+        dripBatchMultiplier: 2.5,
+        dripIntervalMinutes: 120,
+        minRestockThreshold: 1,
+        accentColor: "#008060",
+        enableWebPush: false,
+        senderName: "Fulfillment Center",
+        emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+      },
+      metrics: {
+        totalRegistered: 0,
+        pendingCount: 0,
+        dispatchedCount: 0,
+        convertedCount: 0,
+        ctrPercentage: null,
+        ctrBadgeLabel: "Awaiting First Release",
+        isCtrActive: false,
+      },
+      velocity: {
+        label: "No Activity Recorded",
+        isPositive: true,
+        hasBaseline: false,
+      },
+      totalUnrealizedDemand: 0,
+      isDev: process.env.NODE_ENV !== "production",
+    });
+  }
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -107,19 +140,14 @@ export default function ExecutiveDemandHub() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <TitleBar
-        title="Executive Demand Hub"
-        primaryAction={{
-          content: "Add to Theme Editor",
-          onAction: handleDeepLinkToTheme,
-        }}
-        secondaryActions={[
-          {
-            content: "Settings",
-            onAction: () => navigate("/app/settings"),
-          },
-        ]}
-      />
+      <ui-title-bar title="Executive Demand Hub">
+        <button variant="primary" onClick={handleDeepLinkToTheme}>
+          Add to Theme Editor
+        </button>
+        <button onClick={() => navigate("/app/settings")}>
+          Settings
+        </button>
+      </ui-title-bar>
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Executive Status Strip */}

@@ -2,7 +2,6 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
 import { useState } from "react";
-import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { triggerFifoRestockDispatch } from "../services/restockDispatcher.server";
@@ -11,30 +10,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const settings = await db.restockSettings.findUnique({ where: { shop } });
-  const pendingCount = await db.restockSubscription.count({
-    where: { shop, status: "PENDING" },
-  });
-
-  const url = new URL(request.url);
-  const targetVariantId = url.searchParams.get("variantId");
-
-  let prefilledInventoryItemId = "inv_sample_987";
-  if (targetVariantId) {
-    const matchingSub = await db.restockSubscription.findFirst({
-      where: { shop, variantId: targetVariantId },
+  try {
+    const settings = await db.restockSettings.findUnique({ where: { shop } });
+    const pendingCount = await db.restockSubscription.count({
+      where: { shop, status: "PENDING" },
     });
-    if (matchingSub) {
-      prefilledInventoryItemId = matchingSub.inventoryItemId;
-    }
-  }
 
-  return json({
-    shop,
-    settings,
-    pendingCount,
-    prefilledInventoryItemId,
-  });
+    const url = new URL(request.url);
+    const targetVariantId = url.searchParams.get("variantId");
+
+    let prefilledInventoryItemId = "inv_sample_987";
+    if (targetVariantId) {
+      const matchingSub = await db.restockSubscription.findFirst({
+        where: { shop, variantId: targetVariantId },
+      });
+      if (matchingSub) {
+        prefilledInventoryItemId = matchingSub.inventoryItemId;
+      }
+    }
+
+    return json({
+      shop,
+      settings,
+      pendingCount,
+      prefilledInventoryItemId,
+    });
+  } catch (err) {
+    console.error("[app.simulation loader error]:", err);
+    return json({
+      shop,
+      settings: null,
+      pendingCount: 0,
+      prefilledInventoryItemId: "inv_sample_987",
+    });
+  }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -94,7 +103,7 @@ export default function SimulationLabPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <TitleBar title="FIFO Queue Simulation & Diagnostics" />
+      <ui-title-bar title="FIFO Queue Simulation & Diagnostics" />
 
       <main className="max-w-4xl mx-auto px-6 py-6 space-y-6">
         {/* Diagnostic Simulator Container */}

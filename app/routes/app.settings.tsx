@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation } from "@remix-run/react";
-import { TitleBar, ContextualSaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ColorPickerInput } from "../components/ColorPickerInput";
@@ -9,19 +8,35 @@ import { ToggleSwitch } from "../components/ToggleSwitch";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const settings = (await db.restockSettings.findUnique({
-    where: { shop: session.shop },
-  })) || {
-    dripBatchMultiplier: 2.5,
-    dripIntervalMinutes: 120,
-    minRestockThreshold: 1,
-    accentColor: "#008060",
-    enableWebPush: false,
-    senderName: "Fulfillment Center",
-    emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
-  };
+  try {
+    const settings = (await db.restockSettings.findUnique({
+      where: { shop: session.shop },
+    })) || {
+      dripBatchMultiplier: 2.5,
+      dripIntervalMinutes: 120,
+      minRestockThreshold: 1,
+      accentColor: "#008060",
+      enableWebPush: false,
+      senderName: "Fulfillment Center",
+      emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+    };
 
-  return json({ settings, shop: session.shop });
+    return json({ settings, shop: session.shop });
+  } catch (err) {
+    console.error("[app.settings loader error]:", err);
+    return json({
+      settings: {
+        dripBatchMultiplier: 2.5,
+        dripIntervalMinutes: 120,
+        minRestockThreshold: 1,
+        accentColor: "#008060",
+        enableWebPush: false,
+        senderName: "Fulfillment Center",
+        emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+      },
+      shop: session.shop,
+    });
+  }
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -68,7 +83,6 @@ export default function SettingsPage() {
   const { settings } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
-  const appBridge = useAppBridge();
 
   const [formState, setFormState] = useState(settings);
   const [isDirty, setIsDirty] = useState(false);
@@ -77,8 +91,6 @@ export default function SettingsPage() {
     try {
       if (typeof window !== "undefined" && (window as any).shopify?.toast?.show) {
         (window as any).shopify.toast.show(message);
-      } else if (appBridge && (appBridge as any).toast?.show) {
-        (appBridge as any).toast.show(message);
       }
     } catch {
       // Fallback
@@ -120,22 +132,45 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <TitleBar title="Dispatch & Branding Settings" />
+      <ui-title-bar title="Dispatch & Branding Settings" />
 
-      {/* Polaris Native App Bridge Contextual Save Bar */}
       {isDirty && (
-        <ContextualSaveBar
-          saveAction={{
-            onAction: handleSave,
-            loading: navigation.state === "submitting",
-          }}
-          discardAction={{
-            onAction: handleDiscard,
-          }}
-        />
+        <ui-save-bar id="settings-save-bar">
+          <button variant="primary" onClick={handleSave}>
+            Save
+          </button>
+          <button onClick={handleDiscard}>
+            Discard
+          </button>
+        </ui-save-bar>
       )}
 
       <main className="max-w-4xl mx-auto px-6 py-6 space-y-6">
+        {isDirty && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-xl flex items-center justify-between shadow-xs">
+            <span className="text-xs font-medium text-emerald-900">
+              You have unsaved configuration changes.
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDiscard}
+                className="px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors cursor-pointer"
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={navigation.state === "submitting"}
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg shadow-xs hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {navigation.state === "submitting" ? "Saving..." : "Save Settings"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Pacing Settings Card */}
         <div className="p-6 bg-white border border-zinc-200/80 rounded-xl shadow-xs space-y-4">
           <div>

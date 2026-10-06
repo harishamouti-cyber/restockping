@@ -1,7 +1,6 @@
 import React, { useState, useTransition } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit, useSearchParams } from "@remix-run/react";
-import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
@@ -12,40 +11,53 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const statusParam = url.searchParams.get("status") || "ALL";
   const queryParam = url.searchParams.get("q") || "";
 
-  const whereClause: any = { shop: session.shop };
-  if (statusParam !== "ALL") whereClause.status = statusParam;
-  if (queryParam) {
-    whereClause.OR = [
-      { customerEmail: { contains: queryParam, mode: "insensitive" } },
-      { productTitle: { contains: queryParam, mode: "insensitive" } },
-      { variantTitle: { contains: queryParam, mode: "insensitive" } },
-    ];
+  try {
+    const whereClause: any = { shop: session.shop };
+    if (statusParam !== "ALL") whereClause.status = statusParam;
+    if (queryParam) {
+      whereClause.OR = [
+        { customerEmail: { contains: queryParam, mode: "insensitive" } },
+        { productTitle: { contains: queryParam, mode: "insensitive" } },
+        { variantTitle: { contains: queryParam, mode: "insensitive" } },
+      ];
+    }
+
+    const [subscribers, totalCount, pendingCount, dispatchedCount] = await Promise.all([
+      db.restockSubscription.findMany({
+        where: whereClause,
+        orderBy: { createdAt: "desc" },
+      }),
+      db.restockSubscription.count({ where: { shop: session.shop } }),
+      db.restockSubscription.count({ where: { shop: session.shop, status: "PENDING" } }),
+      db.restockSubscription.count({
+        where: {
+          shop: session.shop,
+          status: { in: ["DISPATCHED", "CONVERTED"] },
+        },
+      }),
+    ]);
+
+    return json({
+      subscribers: subscribers || [],
+      totalCount: totalCount || 0,
+      pendingCount: pendingCount || 0,
+      dispatchedCount: dispatchedCount || 0,
+      statusParam,
+      queryParam,
+      shop: session.shop,
+    });
+  } catch (err) {
+    console.error("[app.subscribers loader error]:", err);
+    return json({
+      subscribers: [],
+      totalCount: 0,
+      pendingCount: 0,
+      dispatchedCount: 0,
+      statusParam,
+      queryParam,
+      shop: session.shop,
+    });
   }
-
-  const [subscribers, totalCount, pendingCount, dispatchedCount] = await Promise.all([
-    db.restockSubscription.findMany({
-      where: whereClause,
-      orderBy: { createdAt: "desc" },
-    }),
-    db.restockSubscription.count({ where: { shop: session.shop } }),
-    db.restockSubscription.count({ where: { shop: session.shop, status: "PENDING" } }),
-    db.restockSubscription.count({
-      where: {
-        shop: session.shop,
-        status: { in: ["DISPATCHED", "CONVERTED"] },
-      },
-    }),
-  ]);
-
-  return json({
-    subscribers,
-    totalCount,
-    pendingCount,
-    dispatchedCount,
-    statusParam,
-    queryParam,
-    shop: session.shop,
-  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -87,7 +99,6 @@ export default function SubscribersPage() {
   } = useLoaderData<typeof loader>();
 
   const submit = useSubmit();
-  const appBridge = useAppBridge();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchValue, setSearchValue] = useState(queryParam);
   const [, startTransition] = useTransition();
@@ -96,8 +107,6 @@ export default function SubscribersPage() {
     try {
       if (typeof window !== "undefined" && (window as any).shopify?.toast?.show) {
         (window as any).shopify.toast.show(message);
-      } else if (appBridge && (appBridge as any).toast?.show) {
-        (appBridge as any).toast.show(message);
       }
     } catch {
       // Fallback
@@ -147,7 +156,7 @@ export default function SubscribersPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <TitleBar title="Waitlist Subscribers" />
+      <ui-title-bar title="Waitlist Subscribers" />
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-4">
         {/* Metric Bar */}
