@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import {
   AppProvider as PolarisAppProvider,
@@ -26,7 +26,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     errors.shop = "Please enter a valid shop domain to log in";
   }
 
-  return { errors, polarisTranslations };
+  return json({ errors, polarisTranslations });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -39,7 +39,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     errors.shop = "Please enter a valid shop domain to log in";
   }
 
-  return { errors };
+  return json({ errors });
 };
 
 export default function AuthLogin() {
