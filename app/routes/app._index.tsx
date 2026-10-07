@@ -6,6 +6,7 @@ import db from "../db.server";
 import { calculateConversionMetrics } from "../services/fifoEngine.server";
 import { TopDemandProducts, type ProductDemand } from "../components/TopDemandProducts";
 import { LivePipelineNodes } from "../components/LivePipelineNodes";
+import { openThemeEditor, getThemeEditorUrl } from "../utils/themeDeepLink";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -103,8 +104,10 @@ export default function RestockOverview() {
     isWaitlistActive ? metrics.pendingCount : Math.round(sampleRestocked * multiplier)
   );
 
+  const themeEditorUrl = getThemeEditorUrl(shop);
+
   const handleThemeDeepLink = () => {
-    window.open(`https://${shop}/admin/themes/current/editor?template=product`, "_blank");
+    openThemeEditor(shop);
   };
 
   return (
@@ -163,12 +166,18 @@ export default function RestockOverview() {
                 </span>
               </div>
             </div>
-            <button
-              onClick={handleThemeDeepLink}
-              className="px-3 py-1 text-xs font-medium text-[#002b66] bg-white border border-[#b4dbff] rounded-md hover:bg-[#e0f0ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
+            <a
+              href={themeEditorUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                openThemeEditor(shop);
+              }}
+              className="px-3 py-1 text-xs font-medium text-[#002b66] bg-white border border-[#b4dbff] rounded-md hover:bg-[#e0f0ff] transition-colors shrink-0 shadow-2xs cursor-pointer inline-flex items-center no-underline"
             >
               Open theme editor →
-            </button>
+            </a>
           </div>
         )}
 

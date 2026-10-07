@@ -1,6 +1,8 @@
 import React from "react";
 import { RestockPingLogo } from "./RestockPingLogo";
 
+import { openThemeEditor } from "../utils/themeDeepLink";
+
 interface AppHeaderProps {
   currentPageTitle: string;
   shop?: string;
@@ -26,11 +28,7 @@ export function AppHeader({
       (typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("shop") || ""
         : "");
-    const themeEditorUrl = `https://admin.shopify.com/store/${targetShop.replace(
-      ".myshopify.com",
-      ""
-    )}/themes/current/editor?context=apps&addAppBlockId=bb3d7694aa9a53e849de71dc2f2806fa/restock_trigger`;
-    window.open(themeEditorUrl, "_blank");
+    openThemeEditor(targetShop);
   }
 
   return (

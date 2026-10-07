@@ -4,6 +4,7 @@ import { useLoaderData, useSubmit, useSearchParams, useNavigate } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
+import { openThemeEditor } from "../utils/themeDeepLink";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -180,14 +181,7 @@ export default function SubscribersPage() {
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-16 font-sans text-[#202223] antialiased">
       <ui-title-bar title="Waitlist Subscribers">
-        <button
-          onClick={() =>
-            window.open(
-              `https://${shop}/admin/themes/current/editor?template=product`,
-              "_blank"
-            )
-          }
-        >
+        <button onClick={() => openThemeEditor(shop)}>
           View in theme
         </button>
       </ui-title-bar>
