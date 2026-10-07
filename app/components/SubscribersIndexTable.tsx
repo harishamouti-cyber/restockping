@@ -17,6 +17,7 @@ interface SubscribersIndexTableProps {
   subscribers: SubscriberItem[];
   shop: string;
   onDispatchSingle: (id: string) => void;
+  onBulkDispatch?: (ids: string[]) => void;
   onBulkDelete: (ids: string[]) => void;
   onCopyPermalink: (sub: SubscriberItem) => void;
 }
@@ -25,6 +26,7 @@ export function SubscribersIndexTable({
   subscribers,
   shop,
   onDispatchSingle,
+  onBulkDispatch,
   onBulkDelete,
   onCopyPermalink,
 }: SubscribersIndexTableProps) {
@@ -37,7 +39,22 @@ export function SubscribersIndexTable({
     clearSelection();
   };
 
+  const handleBulkDispatchAction = () => {
+    if (onBulkDispatch) {
+      onBulkDispatch(selectedResources);
+      clearSelection();
+    }
+  };
+
   const promotedActions = [
+    ...(onBulkDispatch
+      ? [
+          {
+            content: `Dispatch via Flow (${selectedResources.length})`,
+            onAction: handleBulkDispatchAction,
+          },
+        ]
+      : []),
     {
       content: `Remove Selected (${selectedResources.length})`,
       destructive: true,
@@ -97,7 +114,7 @@ export function SubscribersIndexTable({
               onClick={() => onDispatchSingle(sub.id)}
               className="px-2.5 py-1 text-xs font-medium text-[#008060] bg-[#e3f1df] hover:bg-[#c1e5ba] rounded-md transition-colors cursor-pointer"
             >
-              Send alert now
+              Dispatch via Flow
             </button>
           )}
           <button

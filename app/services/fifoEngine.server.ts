@@ -1,3 +1,6 @@
+import db from "../db.server";
+import { emitRestockFlowTrigger, type AdminClient } from "./flowEmitter.server";
+
 export interface MetricCalculations {
   totalRegistered: number;
   pendingCount: number;
@@ -88,5 +91,116 @@ export function calculateVelocityMetrics(subscribers: any[]) {
       subscribers.length > 0 ? "First Request" : "No Activity",
     isPositive: true,
     hasBaseline: false,
+  };
+}
+
+export interface ProcessRestockParams {
+  shop: string;
+  inventoryItemId: string;
+  availableUnits: number;
+  admin?: AdminClient;
+}
+
+/**
+ * Processes FIFO inventory restock events for a replenished item.
+ * Calculates the paced cohort size: min(Replenished Units * Multiplier, Waitlist Count),
+ * sequentially emits native Shopify Flow triggers, and marks only confirmed deliveries as DISPATCHED.
+ */
+export async function processFifoInventoryRestock({
+  shop,
+  inventoryItemId,
+  availableUnits,
+  admin,
+}: ProcessRestockParams) {
+  // 1. Fetch store settings
+  const settings = await db.restockSettings.findUnique({
+    where: { shop },
+  });
+
+  const multiplier = Number(settings?.dripBatchMultiplier) || 2.5;
+
+  // 2. Query pending subscribers chronologically
+  const pendingSubscribers = await db.restockSubscription.findMany({
+    where: {
+      shop,
+      inventoryItemId,
+      status: "PENDING",
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  if (pendingSubscribers.length === 0) {
+    return {
+      dispatchedCount: 0,
+      remainingPending: 0,
+      batchId: 0,
+    };
+  }
+
+  // 3. Calculate paced cohort limit
+  const theoreticalCapacity = Math.round(availableUnits * multiplier);
+  const cohortSize = Math.max(
+    1,
+    Math.min(theoreticalCapacity, pendingSubscribers.length)
+  );
+
+  const cohort = pendingSubscribers.slice(0, cohortSize);
+  const dispatchedIds: string[] = [];
+
+  // Determine current highest batch number
+  const latestBatch = await db.restockSubscription.findFirst({
+    where: { shop, inventoryItemId },
+    orderBy: { dispatchBatch: "desc" },
+    select: { dispatchBatch: true },
+  });
+  const currentBatchId = (latestBatch?.dispatchBatch ?? 0) + 1;
+
+  for (const subscriber of cohort) {
+    if (!subscriber.customerEmail) continue;
+
+    try {
+      await emitRestockFlowTrigger(admin || shop, {
+        customerEmail: subscriber.customerEmail,
+        productTitle: subscriber.productTitle,
+        variantTitle: subscriber.variantTitle,
+        price: Number(subscriber.priceSnapshot) || 0,
+        variantId: subscriber.variantId,
+        productId: subscriber.productId,
+        shop,
+        discountCode: settings?.incentiveDiscountCode || undefined,
+      });
+
+      dispatchedIds.push(subscriber.id);
+    } catch (err) {
+      console.error(
+        `[FIFO Flow Dispatch Error for ${subscriber.customerEmail}]:`,
+        err
+      );
+      // Retain unnotified or failed entries as PENDING to preserve customer queue integrity
+    }
+  }
+
+  // 4. Update only successfully emitted subscribers to DISPATCHED
+  if (dispatchedIds.length > 0) {
+    await db.restockSubscription.updateMany({
+      where: {
+        id: { in: dispatchedIds },
+      },
+      data: {
+        status: "DISPATCHED",
+        dispatchBatch: currentBatchId,
+        dispatchedAt: new Date(),
+      },
+    });
+  }
+
+  const remainingPending = pendingSubscribers.length - dispatchedIds.length;
+
+  return {
+    dispatchedCount: dispatchedIds.length,
+    remainingPending,
+    batchId: currentBatchId,
   };
 }

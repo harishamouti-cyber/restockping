@@ -3,6 +3,7 @@ import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-r
 import { useLoaderData, useSubmit, useSearchParams, useNavigate } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { emitRestockFlowTrigger } from "../services/flowEmitter.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
 
@@ -70,7 +71,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -86,11 +87,79 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "DISPATCH_SINGLE") {
     const id = String(formData.get("id"));
-    await db.restockSubscription.update({
+    const sub = await db.restockSubscription.findUnique({
       where: { id },
-      data: { status: "DISPATCHED", dispatchedAt: new Date() },
     });
-    return json({ success: true });
+
+    if (!sub || sub.shop !== session.shop) {
+      return json({ success: false, error: "Customer subscription not found" }, { status: 404 });
+    }
+
+    try {
+      await emitRestockFlowTrigger(admin, {
+        customerEmail: sub.customerEmail || "",
+        productTitle: sub.productTitle,
+        variantTitle: sub.variantTitle,
+        price: Number(sub.priceSnapshot) || 0,
+        variantId: sub.variantId,
+        productId: sub.productId,
+        shop: session.shop,
+      });
+
+      await db.restockSubscription.update({
+        where: { id },
+        data: { status: "DISPATCHED", dispatchedAt: new Date() },
+      });
+
+      return json({ success: true, message: "Alert dispatched via Shopify Flow" });
+    } catch (err: any) {
+      console.error("[Dispatch Single Flow Error]:", err);
+      return json(
+        { success: false, error: err.message || "Failed to dispatch via Shopify Flow" },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (intent === "BULK_DISPATCH") {
+    const ids = JSON.parse(String(formData.get("ids") || "[]"));
+    if (ids.length === 0) return json({ success: false, count: 0 });
+
+    const subs = await db.restockSubscription.findMany({
+      where: { shop: session.shop, id: { in: ids }, status: "PENDING" },
+    });
+
+    const dispatchedIds: string[] = [];
+    for (const sub of subs) {
+      if (!sub.customerEmail) continue;
+      try {
+        await emitRestockFlowTrigger(admin, {
+          customerEmail: sub.customerEmail,
+          productTitle: sub.productTitle,
+          variantTitle: sub.variantTitle,
+          price: Number(sub.priceSnapshot) || 0,
+          variantId: sub.variantId,
+          productId: sub.productId,
+          shop: session.shop,
+        });
+        dispatchedIds.push(sub.id);
+      } catch (err) {
+        console.error(`[Bulk Flow Dispatch Error for ${sub.customerEmail}]:`, err);
+      }
+    }
+
+    if (dispatchedIds.length > 0) {
+      await db.restockSubscription.updateMany({
+        where: { id: { in: dispatchedIds } },
+        data: { status: "DISPATCHED", dispatchedAt: new Date() },
+      });
+    }
+
+    return json({
+      success: true,
+      count: dispatchedIds.length,
+      message: `${dispatchedIds.length} alert(s) dispatched via Shopify Flow`,
+    });
   }
 
   return json({ success: false });
@@ -155,9 +224,17 @@ export default function SubscribersPage() {
     showToast(`${ids.length} customer(s) removed`);
   };
 
+  const handleBulkDispatch = (ids: string[]) => {
+    submit(
+      { intent: "BULK_DISPATCH", ids: JSON.stringify(ids) },
+      { method: "POST" }
+    );
+    showToast("Alerts dispatched via Shopify Flow");
+  };
+
   const handleDispatchSingle = (id: string) => {
     submit({ intent: "DISPATCH_SINGLE", id }, { method: "POST" });
-    showToast("Alert sent to customer");
+    showToast("Alert dispatched via Shopify Flow");
   };
 
   const handleCopyPermalink = (sub: any) => {
@@ -309,6 +386,7 @@ export default function SubscribersPage() {
               subscribers={subscribers}
               shop={shop}
               onDispatchSingle={handleDispatchSingle}
+              onBulkDispatch={handleBulkDispatch}
               onBulkDelete={handleBulkDelete}
               onCopyPermalink={handleCopyPermalink}
             />

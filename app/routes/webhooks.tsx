@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
-import { triggerFifoRestockDispatch } from "../services/restockDispatcher.server";
+import { processFifoInventoryRestock } from "../services/fifoEngine.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { topic, shop, session, admin, payload } = await authenticate.webhook(request);
@@ -32,13 +32,14 @@ export async function action({ request }: ActionFunctionArgs) {
       const threshold = settings?.minRestockThreshold ?? 1;
 
       if (availableUnits >= threshold) {
-        const dispatchResult = await triggerFifoRestockDispatch({
+        const dispatchResult = await processFifoInventoryRestock({
           shop,
           inventoryItemId,
           availableUnits,
+          admin,
         });
         console.log(
-          `[FIFO Dispatch Completed] Shop: ${shop} | Dispatched: ${dispatchResult.dispatchedCount} | Remaining: ${dispatchResult.remainingPending}`
+          `[FIFO Flow Dispatch Completed] Shop: ${shop} | Dispatched: ${dispatchResult.dispatchedCount} | Remaining: ${dispatchResult.remainingPending}`
         );
       } else {
         console.log(
