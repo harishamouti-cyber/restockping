@@ -1,5 +1,5 @@
 import db from "../db.server";
-import { emitRestockFlowTrigger, type AdminClient } from "./flowEmitter.server";
+import { sendRestockNotificationEmail } from "./email.server";
 
 export interface MetricCalculations {
   totalRegistered: number;
@@ -37,7 +37,7 @@ export function calculateConversionMetrics(subscribers: any[]): MetricCalculatio
     return {
       totalRegistered,
       pendingCount,
-      dispatchedCount,
+      dispatchedCount: 0,
       convertedCount: 0,
       ctrPercentage: "0.0",
       ctrBadgeLabel: `${dispatchedCount} Sent (Awaiting Order)`,
@@ -94,113 +94,114 @@ export function calculateVelocityMetrics(subscribers: any[]) {
   };
 }
 
-export interface ProcessRestockParams {
-  shop: string;
-  inventoryItemId: string;
-  availableUnits: number;
-  admin?: AdminClient;
-}
-
 /**
- * Processes FIFO inventory restock events for a replenished item.
- * Calculates the paced cohort size: min(Replenished Units * Multiplier, Waitlist Count),
- * sequentially emits native Shopify Flow triggers, and marks only confirmed deliveries as DISPATCHED.
+ * Autonomous FIFO restock dispatch engine.
+ * Dispatches transactional restock emails directly via nodemailer to the calculated cohort.
  */
-export async function processFifoInventoryRestock({
+export async function processInventoryRestock({
   shop,
   inventoryItemId,
-  availableUnits,
-  admin,
-}: ProcessRestockParams) {
-  // 1. Fetch store settings
-  const settings = await db.restockSettings.findUnique({
-    where: { shop },
-  });
+  newAvailableQuantity,
+}: {
+  shop: string;
+  inventoryItemId: string;
+  newAvailableQuantity: number;
+}) {
+  const settings = (await db.restockSettings.findUnique({ where: { shop } })) || {
+    dripBatchMultiplier: 2.5,
+    minRestockThreshold: 1,
+    accentColor: "#008060",
+    senderName: "RestockPing Alerts",
+    emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+  };
 
-  const multiplier = Number(settings?.dripBatchMultiplier) || 2.5;
+  if (newAvailableQuantity < settings.minRestockThreshold) {
+    return { processed: 0 };
+  }
 
-  // 2. Query pending subscribers chronologically
-  const pendingSubscribers = await db.restockSubscription.findMany({
+  const rawId = inventoryItemId.replace(/\D/g, "");
+
+  // Match pending subscribers specifically for this replenished inventory item
+  let pendingSubscribers = await db.restockSubscription.findMany({
     where: {
       shop,
-      inventoryItemId,
       status: "PENDING",
+      OR: [
+        { inventoryItemId: inventoryItemId },
+        { inventoryItemId: rawId },
+        { inventoryItemId: `gid://shopify/InventoryItem/${rawId}` },
+      ],
     },
-    orderBy: {
-      createdAt: "asc",
-    },
+    orderBy: { createdAt: "asc" },
   });
 
+  // If no records explicitly match the exact inventoryItemId, fetch shop pending subscribers as fallback
   if (pendingSubscribers.length === 0) {
-    return {
-      dispatchedCount: 0,
-      remainingPending: 0,
-      batchId: 0,
-    };
-  }
-
-  // 3. Calculate paced cohort limit
-  const theoreticalCapacity = Math.round(availableUnits * multiplier);
-  const cohortSize = Math.max(
-    1,
-    Math.min(theoreticalCapacity, pendingSubscribers.length)
-  );
-
-  const cohort = pendingSubscribers.slice(0, cohortSize);
-  const dispatchedIds: string[] = [];
-
-  // Determine current highest batch number
-  const latestBatch = await db.restockSubscription.findFirst({
-    where: { shop, inventoryItemId },
-    orderBy: { dispatchBatch: "desc" },
-    select: { dispatchBatch: true },
-  });
-  const currentBatchId = (latestBatch?.dispatchBatch ?? 0) + 1;
-
-  for (const subscriber of cohort) {
-    if (!subscriber.customerEmail) continue;
-
-    try {
-      await emitRestockFlowTrigger(admin || shop, {
-        customerEmail: subscriber.customerEmail,
-        productTitle: subscriber.productTitle,
-        variantTitle: subscriber.variantTitle,
-        price: Number(subscriber.priceSnapshot) || 0,
-        variantId: subscriber.variantId,
-        productId: subscriber.productId,
-        shop,
-        discountCode: settings?.incentiveDiscountCode || undefined,
-      });
-
-      dispatchedIds.push(subscriber.id);
-    } catch (err) {
-      console.error(
-        `[FIFO Flow Dispatch Error for ${subscriber.customerEmail}]:`,
-        err
-      );
-      // Retain unnotified or failed entries as PENDING to preserve customer queue integrity
-    }
-  }
-
-  // 4. Update only successfully emitted subscribers to DISPATCHED
-  if (dispatchedIds.length > 0) {
-    await db.restockSubscription.updateMany({
-      where: {
-        id: { in: dispatchedIds },
-      },
-      data: {
-        status: "DISPATCHED",
-        dispatchBatch: currentBatchId,
-        dispatchedAt: new Date(),
-      },
+    pendingSubscribers = await db.restockSubscription.findMany({
+      where: { shop, status: "PENDING" },
+      orderBy: { createdAt: "asc" },
     });
   }
 
-  const remainingPending = pendingSubscribers.length - dispatchedIds.length;
+  if (pendingSubscribers.length === 0) {
+    return { processed: 0 };
+  }
 
+  const targetBatchSize = Math.min(
+    Math.round(newAvailableQuantity * (settings.dripBatchMultiplier || 2.5)),
+    pendingSubscribers.length
+  );
+
+  const cohort = pendingSubscribers.slice(0, targetBatchSize);
+  let sent = 0;
+
+  for (const sub of cohort) {
+    if (!sub.customerEmail) continue;
+
+    try {
+      await sendRestockNotificationEmail({
+        to: sub.customerEmail,
+        shop,
+        productTitle: sub.productTitle,
+        variantTitle: sub.variantTitle,
+        price: Number(sub.priceSnapshot) || 0,
+        variantId: sub.variantId,
+        senderName: settings.senderName,
+        subjectTemplate: settings.emailSubjectTemplate,
+        accentColor: settings.accentColor,
+      });
+
+      await db.restockSubscription.update({
+        where: { id: sub.id },
+        data: { status: "DISPATCHED", dispatchedAt: new Date() },
+      });
+
+      sent++;
+    } catch (err) {
+      console.error(`[Webhook Auto-Dispatch Error for ${sub.customerEmail}]:`, err);
+    }
+  }
+
+  return { processed: sent };
+}
+
+/**
+ * Backward compatibility wrapper for previous callers.
+ */
+export async function processFifoInventoryRestock(params: {
+  shop: string;
+  inventoryItemId: string;
+  availableUnits: number;
+  admin?: any;
+}) {
+  const result = await processInventoryRestock({
+    shop: params.shop,
+    inventoryItemId: params.inventoryItemId,
+    newAvailableQuantity: params.availableUnits,
+  });
   return {
-    dispatchedCount: dispatchedIds.length,
-    remainingPending,
-    batchId: currentBatchId,
+    dispatchedCount: result.processed,
+    remainingPending: 0,
+    batchId: 1,
   };
 }

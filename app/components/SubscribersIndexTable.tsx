@@ -50,7 +50,7 @@ export function SubscribersIndexTable({
     ...(onBulkDispatch
       ? [
           {
-            content: `Dispatch via Flow (${selectedResources.length})`,
+            content: `Dispatch alert (${selectedResources.length})`,
             onAction: handleBulkDispatchAction,
           },
         ]
@@ -114,7 +114,7 @@ export function SubscribersIndexTable({
               onClick={() => onDispatchSingle(sub.id)}
               className="px-2.5 py-1 text-xs font-medium text-[#008060] bg-[#e3f1df] hover:bg-[#c1e5ba] rounded-md transition-colors cursor-pointer"
             >
-              Dispatch via Flow
+              Dispatch alert
             </button>
           )}
           <button

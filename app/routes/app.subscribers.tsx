@@ -1,9 +1,9 @@
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSubmit, useSearchParams, useNavigate } from "@remix-run/react";
+import { useLoaderData, useSubmit, useSearchParams, useNavigate, useActionData } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { emitRestockFlowTrigger } from "../services/flowEmitter.server";
+import { sendRestockNotificationEmail } from "../services/email.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
 
@@ -71,9 +71,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  const settings = await db.restockSettings.findUnique({ where: { shop: session.shop } });
 
   if (intent === "BULK_DELETE") {
     const ids = JSON.parse(String(formData.get("ids") || "[]"));
@@ -82,28 +84,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         where: { shop: session.shop, id: { in: ids } },
       });
     }
-    return json({ success: true, count: ids.length });
+    return json({ success: true, count: ids.length, message: `${ids.length} customer(s) removed` });
   }
 
   if (intent === "DISPATCH_SINGLE") {
     const id = String(formData.get("id"));
-    const sub = await db.restockSubscription.findUnique({
-      where: { id },
-    });
+    const subscriber = await db.restockSubscription.findUnique({ where: { id } });
 
-    if (!sub || sub.shop !== session.shop) {
-      return json({ success: false, error: "Customer subscription not found" }, { status: 404 });
+    if (!subscriber || !subscriber.customerEmail) {
+      return json({ success: false, error: "Subscriber not found or missing email." }, { status: 404 });
     }
 
     try {
-      await emitRestockFlowTrigger(admin, {
-        customerEmail: sub.customerEmail || "",
-        productTitle: sub.productTitle,
-        variantTitle: sub.variantTitle,
-        price: Number(sub.priceSnapshot) || 0,
-        variantId: sub.variantId,
-        productId: sub.productId,
+      await sendRestockNotificationEmail({
+        to: subscriber.customerEmail,
         shop: session.shop,
+        productTitle: subscriber.productTitle,
+        variantTitle: subscriber.variantTitle,
+        price: Number(subscriber.priceSnapshot) || 0,
+        variantId: subscriber.variantId,
+        senderName: settings?.senderName,
+        subjectTemplate: settings?.emailSubjectTemplate,
+        accentColor: settings?.accentColor,
       });
 
       await db.restockSubscription.update({
@@ -111,54 +113,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data: { status: "DISPATCHED", dispatchedAt: new Date() },
       });
 
-      return json({ success: true, message: "Alert dispatched via Shopify Flow" });
+      return json({ success: true, message: `Alert email delivered to ${subscriber.customerEmail}!` });
     } catch (err: any) {
-      console.error("[Dispatch Single Flow Error]:", err);
-      return json(
-        { success: false, error: err.message || "Failed to dispatch via Shopify Flow" },
-        { status: 400 }
-      );
+      console.error("[Single Dispatch Error]:", err);
+      return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
     }
   }
 
   if (intent === "BULK_DISPATCH") {
-    const ids = JSON.parse(String(formData.get("ids") || "[]"));
-    if (ids.length === 0) return json({ success: false, count: 0 });
-
-    const subs = await db.restockSubscription.findMany({
-      where: { shop: session.shop, id: { in: ids }, status: "PENDING" },
+    const ids: string[] = JSON.parse(String(formData.get("ids") || "[]"));
+    const subscribers = await db.restockSubscription.findMany({
+      where: { id: { in: ids }, shop: session.shop, status: "PENDING" },
     });
 
-    const dispatchedIds: string[] = [];
-    for (const sub of subs) {
+    let deliveredCount = 0;
+    let failedCount = 0;
+
+    for (const sub of subscribers) {
       if (!sub.customerEmail) continue;
       try {
-        await emitRestockFlowTrigger(admin, {
-          customerEmail: sub.customerEmail,
+        await sendRestockNotificationEmail({
+          to: sub.customerEmail,
+          shop: session.shop,
           productTitle: sub.productTitle,
           variantTitle: sub.variantTitle,
           price: Number(sub.priceSnapshot) || 0,
           variantId: sub.variantId,
-          productId: sub.productId,
-          shop: session.shop,
+          senderName: settings?.senderName,
+          accentColor: settings?.accentColor,
         });
-        dispatchedIds.push(sub.id);
+
+        await db.restockSubscription.update({
+          where: { id: sub.id },
+          data: { status: "DISPATCHED", dispatchedAt: new Date() },
+        });
+
+        deliveredCount++;
       } catch (err) {
-        console.error(`[Bulk Flow Dispatch Error for ${sub.customerEmail}]:`, err);
+        failedCount++;
       }
     }
 
-    if (dispatchedIds.length > 0) {
-      await db.restockSubscription.updateMany({
-        where: { id: { in: dispatchedIds } },
-        data: { status: "DISPATCHED", dispatchedAt: new Date() },
-      });
-    }
-
     return json({
-      success: true,
-      count: dispatchedIds.length,
-      message: `${dispatchedIds.length} alert(s) dispatched via Shopify Flow`,
+      success: deliveredCount > 0,
+      message: `Dispatched ${deliveredCount} alert(s).${failedCount > 0 ? ` (${failedCount} failed)` : ""}`,
     });
   }
 
@@ -176,6 +174,7 @@ export default function SubscribersPage() {
     queryParam,
     shop,
   } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
 
   const submit = useSubmit();
   const navigate = useNavigate();
@@ -183,15 +182,23 @@ export default function SubscribersPage() {
   const [searchValue, setSearchValue] = useState(queryParam);
   const [, startTransition] = useTransition();
 
-  const showToast = (message: string) => {
+  const showToast = (message: string, isError = false) => {
     try {
       if (typeof window !== "undefined" && (window as any).shopify?.toast?.show) {
-        (window as any).shopify.toast.show(message);
+        (window as any).shopify.toast.show(message, isError ? { isError: true } : undefined);
       }
     } catch {
       // Fallback
     }
   };
+
+  useEffect(() => {
+    if (actionData?.success && (actionData as any).message) {
+      showToast((actionData as any).message);
+    } else if (actionData?.error) {
+      showToast((actionData as any).error, true);
+    }
+  }, [actionData]);
 
   const handleSearchChange = (val: string) => {
     setSearchValue(val);
@@ -221,7 +228,6 @@ export default function SubscribersPage() {
       { intent: "BULK_DELETE", ids: JSON.stringify(ids) },
       { method: "POST" }
     );
-    showToast(`${ids.length} customer(s) removed`);
   };
 
   const handleBulkDispatch = (ids: string[]) => {
@@ -229,12 +235,12 @@ export default function SubscribersPage() {
       { intent: "BULK_DISPATCH", ids: JSON.stringify(ids) },
       { method: "POST" }
     );
-    showToast("Alerts dispatched via Shopify Flow");
+    showToast(`Sending ${ids.length} alert email(s)...`);
   };
 
   const handleDispatchSingle = (id: string) => {
     submit({ intent: "DISPATCH_SINGLE", id }, { method: "POST" });
-    showToast("Alert dispatched via Shopify Flow");
+    showToast("Sending alert email...");
   };
 
   const handleCopyPermalink = (sub: any) => {

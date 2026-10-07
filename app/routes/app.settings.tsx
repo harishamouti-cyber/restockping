@@ -1,81 +1,84 @@
 import React, { useState, useEffect } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
+import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { emitRestockFlowTrigger } from "../services/flowEmitter.server";
-import { ColorPickerInput } from "../components/ColorPickerInput";
-import { ToggleSwitch } from "../components/ToggleSwitch";
+import { sendRestockNotificationEmail } from "../services/email.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  try {
-    const settings = (await db.restockSettings.findUnique({
-      where: { shop: session.shop },
-    })) || {
-      dripBatchMultiplier: 2.5,
-      dripIntervalMinutes: 120,
-      minRestockThreshold: 1,
-      accentColor: "#008060",
-      enableWebPush: false,
-      senderName: "Fulfillment Center",
-      emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
-    };
+  const shop = session.shop;
 
-    return json({ settings, shop: session.shop });
-  } catch (err) {
-    console.error("[app.settings loader error]:", err);
-    return json({
-      settings: {
-        dripBatchMultiplier: 2.5,
-        dripIntervalMinutes: 120,
-        minRestockThreshold: 1,
-        accentColor: "#008060",
-        enableWebPush: false,
-        senderName: "Fulfillment Center",
-        emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
-      },
-      shop: session.shop,
-    });
-  }
+  const settings = (await db.restockSettings.findUnique({ where: { shop } })) || {
+    dripBatchMultiplier: 2.5,
+    dripIntervalMinutes: 120,
+    minRestockThreshold: 1,
+    accentColor: "#008060",
+    senderName: "RestockPing Alerts",
+    emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+  };
+
+  return json({
+    settings,
+    shop,
+    defaultRecipient: "harishamouti@gmail.com",
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
-  if (intent === "TEST_FLOW_TRIGGER") {
-    const testEmail = String(formData.get("testEmail") || `merchant@${session.shop}`);
+  if (intent === "SEND_TEST_EMAIL") {
+    const targetEmail = String(formData.get("testEmail") || "").trim();
+    const senderName = String(formData.get("senderName") || "Restock Alerts");
+    const subjectTemplate = String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}}");
+    const headlineText = String(formData.get("headlineText") || "Your item is back in stock");
+    const bodyText = String(formData.get("bodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out.");
+    const buttonText = String(formData.get("buttonText") || "Claim in 1-Click Checkout");
+    const accentColor = String(formData.get("accentColor") || "#008060");
+
+    if (!targetEmail || !targetEmail.includes("@")) {
+      return json({ success: false, error: "Please enter a valid email address." }, { status: 400 });
+    }
+
     try {
-      await emitRestockFlowTrigger(admin, {
-        customerEmail: testEmail,
-        productTitle: "Sample Restocked Product",
-        variantTitle: "Standard Edition",
-        price: 49.99,
-        variantId: "gid://shopify/ProductVariant/1234567890",
-        productId: "gid://shopify/Product/1234567890",
+      await sendRestockNotificationEmail({
+        to: targetEmail,
         shop: session.shop,
+        productTitle: "The Out of Stock Snowboard (Test Delivery)",
+        variantTitle: "Standard Edition",
+        price: 885.95,
+        variantId: "gid://shopify/ProductVariant/123456789",
+        senderName,
+        subjectTemplate,
+        headlineText,
+        bodyText,
+        buttonText,
+        accentColor,
       });
-      return json({ success: true, message: `Test Flow trigger emitted for ${testEmail}` });
+
+      return json({ success: true, message: `Test email delivered to ${targetEmail}!` });
     } catch (err: any) {
-      console.error("[Test Flow Trigger Error]:", err);
+      console.error("[Test Send Error]:", err);
       return json(
-        { success: false, error: err.message || "Failed to emit Shopify Flow trigger" },
+        {
+          success: false,
+          error: `Delivery failed: ${err.message}. Please check SMTP configuration in .env.`,
+        },
         { status: 400 }
       );
     }
   }
 
-  const dripBatchMultiplier = parseFloat(String(formData.get("dripBatchMultiplier") || "2.5")) || 2.5;
-  const dripIntervalMinutes = parseInt(String(formData.get("dripIntervalMinutes") || "120"), 10) || 120;
-  const minRestockThreshold = parseInt(String(formData.get("minRestockThreshold") || "1"), 10) || 1;
+  // Save Settings Intent
+  const dripBatchMultiplier = parseFloat(String(formData.get("dripBatchMultiplier")) || "2.5") || 2.5;
+  const dripIntervalMinutes = parseInt(String(formData.get("dripIntervalMinutes")) || "120", 10) || 120;
+  const minRestockThreshold = parseInt(String(formData.get("minRestockThreshold")) || "1", 10) || 1;
   const accentColor = String(formData.get("accentColor") || "#008060");
-  const enableWebPush = formData.get("enableWebPush") === "true";
-  const senderName = String(formData.get("senderName") || "Fulfillment Center");
-  const emailSubjectTemplate = String(
-    formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"
-  );
+  const senderName = String(formData.get("senderName") || "Restock Alerts");
+  const emailSubjectTemplate = String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship");
 
   await db.restockSettings.upsert({
     where: { shop: session.shop },
@@ -84,7 +87,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       dripIntervalMinutes,
       minRestockThreshold,
       accentColor,
-      enableWebPush,
       senderName,
       emailSubjectTemplate,
     },
@@ -94,94 +96,93 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       dripIntervalMinutes,
       minRestockThreshold,
       accentColor,
-      enableWebPush,
       senderName,
       emailSubjectTemplate,
     },
   });
 
-  return json({ success: true, message: "Settings saved successfully" });
+  return json({ success: true, message: "Settings saved successfully." });
 };
 
-export default function SettingsPage() {
-  const { settings, shop } = useLoaderData<typeof loader>();
+export default function Settings() {
+  const { settings, defaultRecipient, shop } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
 
-  const [formState, setFormState] = useState(settings);
-  const [isDirty, setIsDirty] = useState(false);
-  const [testEmail, setTestEmail] = useState("");
-  const [isTesting, setIsTesting] = useState(false);
+  const [formState, setFormState] = useState({
+    ...settings,
+    headlineText: "Your item is back in stock",
+    bodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+    buttonText: "Claim in 1-Click Checkout",
+  });
 
-  const showToast = (message: string) => {
+  const [testEmail, setTestEmail] = useState(defaultRecipient);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const showToast = (message: string, isError = false) => {
     try {
       if (typeof window !== "undefined" && (window as any).shopify?.toast?.show) {
-        (window as any).shopify.toast.show(message);
+        (window as any).shopify.toast.show(message, isError ? { isError: true } : undefined);
       }
     } catch {
       // Fallback
     }
   };
 
+  useEffect(() => {
+    if (actionData?.success && (actionData as any).message) {
+      showToast((actionData as any).message);
+    } else if (actionData?.error) {
+      showToast((actionData as any).error, true);
+    }
+  }, [actionData]);
+
   const handleChange = (field: string, value: any) => {
     setFormState((prev) => {
       const next = { ...prev, [field]: value };
-      setIsDirty(JSON.stringify(next) !== JSON.stringify(settings));
+      setIsDirty(true);
       return next;
     });
   };
 
   const handleSave = () => {
-    const formData = new FormData();
-    formData.append("dripBatchMultiplier", String(formState.dripBatchMultiplier));
-    formData.append("dripIntervalMinutes", String(formState.dripIntervalMinutes));
-    formData.append("minRestockThreshold", String(formState.minRestockThreshold));
-    formData.append("accentColor", formState.accentColor);
-    formData.append("enableWebPush", formState.enableWebPush ? "true" : "false");
-    formData.append("senderName", formState.senderName);
-    formData.append("emailSubjectTemplate", formState.emailSubjectTemplate);
-
-    submit(formData, { method: "POST" });
+    const fd = new FormData();
+    fd.append("dripBatchMultiplier", String(formState.dripBatchMultiplier));
+    fd.append("dripIntervalMinutes", String(formState.dripIntervalMinutes || 120));
+    fd.append("minRestockThreshold", String(formState.minRestockThreshold));
+    fd.append("accentColor", formState.accentColor);
+    fd.append("senderName", formState.senderName);
+    fd.append("emailSubjectTemplate", formState.emailSubjectTemplate);
+    submit(fd, { method: "POST" });
     setIsDirty(false);
-    showToast("Settings saved successfully");
   };
 
   const handleDiscard = () => {
-    setFormState(settings);
+    setFormState({
+      ...settings,
+      headlineText: "Your item is back in stock",
+      bodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+      buttonText: "Claim in 1-Click Checkout",
+    });
     setIsDirty(false);
   };
 
-  useEffect(() => {
-    setFormState(settings);
-    setIsDirty(false);
-  }, [settings]);
-
-  useEffect(() => {
-    if (actionData) {
-      setIsTesting(false);
-      if ((actionData as any).message) {
-        showToast((actionData as any).message);
-      } else if ((actionData as any).error) {
-        showToast((actionData as any).error);
-      }
-    }
-  }, [actionData]);
-
-  const handleTestTrigger = () => {
-    const email = testEmail.trim() || `merchant@${shop}`;
-    setIsTesting(true);
-    const formData = new FormData();
-    formData.append("intent", "TEST_FLOW_TRIGGER");
-    formData.append("testEmail", email);
-    submit(formData, { method: "POST" });
+  const handleSendTestEmail = () => {
+    const fd = new FormData();
+    fd.append("intent", "SEND_TEST_EMAIL");
+    fd.append("testEmail", testEmail);
+    fd.append("senderName", formState.senderName);
+    fd.append("emailSubjectTemplate", formState.emailSubjectTemplate);
+    fd.append("headlineText", formState.headlineText);
+    fd.append("bodyText", formState.bodyText);
+    fd.append("buttonText", formState.buttonText);
+    fd.append("accentColor", formState.accentColor);
+    submit(fd, { method: "POST" });
   };
-
-  const storeHandle = shop.replace(".myshopify.com", "");
-  const flowUrl = `https://admin.shopify.com/store/${storeHandle}/apps/flow`;
 
   return (
-    <div className="min-h-screen bg-[#f1f2f4] pb-20 font-sans text-[#202223] antialiased">
+    <div className="min-h-screen bg-[#f1f2f4] pb-24 font-sans text-[#202223] antialiased">
       <ui-title-bar title="Settings" />
 
       {isDirty && (
@@ -195,7 +196,7 @@ export default function SettingsPage() {
         </ui-save-bar>
       )}
 
-      <main className="max-w-[1000px] mx-auto px-4 py-4 space-y-4">
+      <main className="max-w-[1140px] mx-auto px-4 py-4 space-y-4">
         {/* Unsaved Changes Banner */}
         {isDirty && (
           <div className="p-3 bg-[#fff5ea] border border-[#f5b854] rounded-lg flex items-center justify-between shadow-[0_1px_0_rgba(0,0,0,0.05)]">
@@ -225,223 +226,181 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Section 1: Email Delivery Engine (Shopify Flow Native) */}
-        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-[#202223]">
-                  Email Delivery Engine: Shopify Flow Native
-                </h2>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#e3f1df] text-[#008060]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#008060]" />
-                  Active
-                </span>
-              </div>
-              <p className="text-xs text-[#616161] mt-1 max-w-2xl leading-relaxed">
-                RestockPing automatically broadcasts restock events to Shopify Flow. You can route alerts through Shopify Email (10,000 free emails/month), Klaviyo, or Omnisend with zero third-party API keys required.
-              </p>
-            </div>
-            <a
-              href={flowUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] hover:bg-[#f6f6f7] rounded-md transition-colors inline-flex items-center gap-1.5 shadow-2xs no-underline cursor-pointer"
-            >
-              <span>Manage in Shopify Flow</span>
-              <svg className="w-3.5 h-3.5 text-[#616161]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
+        {/* Quick Test Bar */}
+        <div className="p-3.5 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#008060]" />
+            <span className="text-xs font-semibold text-[#202223]">Delivery Verification:</span>
+            <span className="text-xs text-[#616161]">Send a real email to verify 1-Click checkout links in your inbox</span>
           </div>
-
-          {/* Flow Trigger Payload Reference Grid */}
-          <div className="p-3 bg-[#f6f6f7] border border-[#e1e3e5] rounded-md space-y-2">
-            <div className="text-xs font-semibold text-[#202223]">
-              Available Flow Trigger Parameters (<code className="text-[11px] font-mono text-[#005bd3]">customer_ready_for_restock_alert</code>)
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
-              <div className="p-2 bg-white border border-[#e1e3e5] rounded">
-                <span className="text-[#202223] font-medium block">customer_email</span>
-                <span className="text-[#616161] text-[10px]">Shopper email address</span>
-              </div>
-              <div className="p-2 bg-white border border-[#e1e3e5] rounded">
-                <span className="text-[#202223] font-medium block">product_title</span>
-                <span className="text-[#616161] text-[10px]">Restocked product title</span>
-              </div>
-              <div className="p-2 bg-white border border-[#e1e3e5] rounded">
-                <span className="text-[#202223] font-medium block">variant_title</span>
-                <span className="text-[#616161] text-[10px]">Restocked variant title</span>
-              </div>
-              <div className="p-2 bg-white border border-[#e1e3e5] rounded">
-                <span className="text-[#202223] font-medium block">product_price</span>
-                <span className="text-[#616161] text-[10px]">Formatted currency price</span>
-              </div>
-              <div className="p-2 bg-white border border-[#e1e3e5] rounded">
-                <span className="text-[#202223] font-medium block">checkout_permalink</span>
-                <span className="text-[#616161] text-[10px]">1-Click pre-filled cart link</span>
-              </div>
-              <div className="p-2 bg-white border border-[#e1e3e5] rounded">
-                <span className="text-[#202223] font-medium block">product_id</span>
-                <span className="text-[#616161] text-[10px]">Shopify Product ID</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Test Flow Trigger Bar */}
-          <div className="pt-2.5 border-t border-[#f1f2f4] flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <span className="text-xs font-medium text-[#202223] block">
-                Test trigger dispatch
-              </span>
-              <span className="text-[11px] text-[#616161]">
-                Emit a sample event to verify your active Shopify Flow automation workflows.
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="email"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-                placeholder={`merchant@${shop}`}
-                className="px-2.5 py-1.5 text-xs bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none w-52 font-sans"
-              />
-              <button
-                type="button"
-                onClick={handleTestTrigger}
-                disabled={isTesting || navigation.state === "submitting"}
-                className="px-3 py-1.5 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] hover:bg-[#f6f6f7] rounded-md transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
-              >
-                {isTesting ? "Emitting..." : "Send test trigger"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 2: Smart Alert Pacing */}
-        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-[#202223]">
-              Smart restock pacing
-            </h2>
-            <p className="text-xs text-[#616161] mt-0.5">
-              Control how customer notifications are dispatched when inventory is replenished to prevent instant sell-outs.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-[#f1f2f4]">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-[#202223] block">
-                Notification batch size multiplier
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  value={formState.dripBatchMultiplier}
-                  onChange={(e) => handleChange("dripBatchMultiplier", parseFloat(e.target.value) || 2.5)}
-                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
-                />
-              </div>
-              <p className="text-[11px] text-[#616161] leading-relaxed">
-                Number of customers alerted per unit restocked (e.g. 2.5x with 4 units notifies 10 customers).
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-[#202223] block">
-                Pause between batches (minutes)
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="1"
-                  min="5"
-                  value={formState.dripIntervalMinutes}
-                  onChange={(e) => handleChange("dripIntervalMinutes", parseInt(e.target.value, 10) || 120)}
-                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
-                />
-              </div>
-              <p className="text-[11px] text-[#616161] leading-relaxed">
-                Cooldown period before notifying the next group of customers if items remain in stock.
-              </p>
-            </div>
-          </div>
-
-          <div className="max-w-md space-y-1 pt-1">
-            <label className="text-xs font-medium text-[#202223] block">
-              Minimum restock threshold (units)
-            </label>
+          <div className="flex items-center gap-2">
             <input
-              type="number"
-              step="1"
-              min="1"
-              value={formState.minRestockThreshold}
-              onChange={(e) => handleChange("minRestockThreshold", parseInt(e.target.value, 10) || 1)}
-              className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+              type="email"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              className="px-2.5 py-1 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] w-64"
+              placeholder="Your email address"
             />
-            <p className="text-[11px] text-[#616161] leading-relaxed">
-              Minimum inventory required to trigger restock notifications.
-            </p>
+            <button
+              type="button"
+              disabled={navigation.state === "submitting"}
+              onClick={handleSendTestEmail}
+              className="px-3 py-1 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              {navigation.state === "submitting" ? "Sending..." : "Send Test Email"}
+            </button>
           </div>
         </div>
 
-        {/* Section 3: Storefront & Customer Notifications */}
-        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-[#202223]">
-              Storefront & notification preferences
-            </h2>
-            <p className="text-xs text-[#616161] mt-0.5">
-              Customize the appearance of storefront restock buttons and customer notification details.
-            </p>
-          </div>
+        {/* 2-Column Workspace: Controls (Left) vs Live Email Preview (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          {/* Controls Column */}
+          <div className="lg:col-span-6 space-y-3.5">
+            {/* Template Card */}
+            <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
+              <span className="text-xs font-semibold text-[#202223] block">Restock Email Content</span>
 
-          <div className="pt-1 border-t border-[#f1f2f4] space-y-4">
-            <ColorPickerInput
-              label="Button & badge accent color"
-              value={formState.accentColor}
-              onChange={(color) => handleChange("accentColor", color)}
-              description='Color used for the "Notify Me When Available" storefront button and badges.'
-            />
-
-            <ToggleSwitch
-              label="Browser web push notifications"
-              description="Allow shoppers to opt into instant notifications directly in their desktop or mobile browser."
-              checked={formState.enableWebPush}
-              onChange={(checked) => handleChange("enableWebPush", checked)}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-[#202223] block">
-                  Sender name
-                </label>
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Sender Name</label>
                 <input
                   type="text"
                   value={formState.senderName}
                   onChange={(e) => handleChange("senderName", e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
                 />
-                <p className="text-[11px] text-[#616161]">
-                  Sender name displayed on customer restock emails.
-                </p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-[#202223] block">
-                  Email subject line
-                </label>
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Subject Line</label>
                 <input
                   type="text"
                   value={formState.emailSubjectTemplate}
                   onChange={(e) => handleChange("emailSubjectTemplate", e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
                 />
-                <p className="text-[11px] text-[#616161]">
-                  Supports the <code className="bg-[#f1f2f4] px-1 py-0.5 rounded text-[#202223] text-[10px]">{"{{product_title}}"}</code> template placeholder.
-                </p>
+                <span className="text-[11px] text-[#8c9196] mt-0.5 block">Use <code>{"{{product_title}}"}</code> for the dynamic product name.</span>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Email Headline</label>
+                <input
+                  type="text"
+                  value={formState.headlineText}
+                  onChange={(e) => handleChange("headlineText", e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Body Text</label>
+                <textarea
+                  rows={3}
+                  value={formState.bodyText}
+                  onChange={(e) => handleChange("bodyText", e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="text-xs font-medium text-[#202223] block mb-1">Button Text</label>
+                  <input
+                    type="text"
+                    value={formState.buttonText}
+                    onChange={(e) => handleChange("buttonText", e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#202223] block mb-1">Button Color</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={formState.accentColor}
+                      onChange={(e) => handleChange("accentColor", e.target.value)}
+                      className="w-8 h-8 rounded border border-[#d2d5d8] p-0.5 bg-white cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formState.accentColor}
+                      onChange={(e) => handleChange("accentColor", e.target.value)}
+                      className="w-full px-2 py-1 text-xs font-mono uppercase bg-white border border-[#d2d5d8] rounded-md"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Pacing Configuration Card */}
+            <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
+              <span className="text-xs font-semibold text-[#202223] block">Pacing & Dispatch Threshold</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-[#202223] block mb-1">Pacing Multiplier</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    value={formState.dripBatchMultiplier}
+                    onChange={(e) => handleChange("dripBatchMultiplier", parseFloat(e.target.value) || 2.5)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
+                  />
+                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">e.g. 2.5x of restocked stock.</span>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#202223] block mb-1">Min Restock Units</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formState.minRestockThreshold}
+                    onChange={(e) => handleChange("minRestockThreshold", parseInt(e.target.value, 10) || 1)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
+                  />
+                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">Minimum units before alerts trigger.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time Email Preview Column */}
+          <div className="lg:col-span-6 sticky top-4">
+            <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[#202223]">Live Customer Email Preview</span>
+                <span className="text-[10px] font-medium bg-[#f1f2f4] text-[#616161] px-2 py-0.5 rounded">
+                  Desktop & Mobile Responsive
+                </span>
+              </div>
+
+              {/* Rendered Preview Box */}
+              <div className="border border-[#e1e3e5] rounded-lg bg-[#f6f6f7] p-4 text-left">
+                <div className="max-w-[420px] mx-auto bg-white border border-[#e1e3e5] rounded-lg p-5 space-y-3 shadow-xs">
+                  <span className="inline-block px-2 py-0.5 bg-[#e3f1df] text-[#008060] text-[10px] font-semibold uppercase rounded">
+                    ● Restock Notice
+                  </span>
+                  <h3 className="text-base font-bold text-[#202223] leading-snug">
+                    {formState.headlineText}
+                  </h3>
+                  <p className="text-xs text-[#616161] leading-relaxed">
+                    {formState.bodyText}
+                  </p>
+
+                  <div className="p-3 bg-[#f6f6f7] border border-[#e1e3e5] rounded-md">
+                    <span className="font-semibold text-xs text-[#202223] block">The Out of Stock Snowboard</span>
+                    <span className="text-[11px] text-[#6d7175]">Standard Edition · $885.95</span>
+                  </div>
+
+                  <div
+                    style={{ backgroundColor: formState.accentColor }}
+                    className="w-full py-2.5 text-center text-xs font-semibold text-white rounded cursor-default shadow-xs"
+                  >
+                    {formState.buttonText} →
+                  </div>
+
+                  <div className="text-[10px] text-center text-[#8c9196] pt-1 border-t border-[#f1f2f4]">
+                    Delivered automatically on behalf of {shop} via RestockPing
+                  </div>
+                </div>
               </div>
             </div>
           </div>

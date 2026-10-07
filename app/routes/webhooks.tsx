@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
-import { processFifoInventoryRestock } from "../services/fifoEngine.server";
+import { processInventoryRestock } from "../services/fifoEngine.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { topic, shop, session, admin, payload } = await authenticate.webhook(request);
@@ -14,38 +14,20 @@ export async function action({ request }: ActionFunctionArgs) {
 
   switch (topic) {
     case "INVENTORY_LEVELS_UPDATE": {
-      const inventoryItemId = String(
-        payload.inventory_item_id || payload.inventoryItemId || ""
-      );
-      const availableUnits = Number(
-        payload.available ?? payload.availableUnits ?? 0
-      );
+      const rawId = payload.inventory_item_id || payload.inventoryItemId || "";
+      const inventoryItemId = `gid://shopify/InventoryItem/${rawId}`;
+      const available = Number(payload.available ?? payload.availableUnits ?? 0);
 
-      if (!inventoryItemId) {
-        return new Response("Missing inventory_item_id", { status: 400 });
-      }
-
-      // Check merchant threshold
-      const settings = await db.restockSettings.findUnique({
-        where: { shop },
+      const result = await processInventoryRestock({
+        shop,
+        inventoryItemId,
+        newAvailableQuantity: available,
       });
-      const threshold = settings?.minRestockThreshold ?? 1;
 
-      if (availableUnits >= threshold) {
-        const dispatchResult = await processFifoInventoryRestock({
-          shop,
-          inventoryItemId,
-          availableUnits,
-          admin,
-        });
-        console.log(
-          `[FIFO Flow Dispatch Completed] Shop: ${shop} | Dispatched: ${dispatchResult.dispatchedCount} | Remaining: ${dispatchResult.remainingPending}`
-        );
-      } else {
-        console.log(
-          `[Inventory Update Skipped] Available ${availableUnits} below threshold ${threshold}`
-        );
-      }
+      console.log(
+        `[Inventory Restock Email Processing Completed] Shop: ${shop} | Dispatched: ${result.processed}`
+      );
+
       return new Response(null, { status: 200 });
     }
 
