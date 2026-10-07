@@ -6,6 +6,7 @@ export interface MetricCalculations {
   ctrPercentage: string | null;
   ctrBadgeLabel: string;
   isCtrActive: boolean;
+  hasOrders: boolean;
 }
 
 export function calculateConversionMetrics(subscribers: any[]): MetricCalculations {
@@ -25,6 +26,20 @@ export function calculateConversionMetrics(subscribers: any[]): MetricCalculatio
       ctrPercentage: null,
       ctrBadgeLabel: "No alerts sent yet",
       isCtrActive: false,
+      hasOrders: false,
+    };
+  }
+
+  if (convertedCount === 0) {
+    return {
+      totalRegistered,
+      pendingCount,
+      dispatchedCount,
+      convertedCount: 0,
+      ctrPercentage: "0.0",
+      ctrBadgeLabel: `${dispatchedCount} Sent (Awaiting Order)`,
+      isCtrActive: true,
+      hasOrders: false,
     };
   }
 
@@ -37,6 +52,7 @@ export function calculateConversionMetrics(subscribers: any[]): MetricCalculatio
     ctrPercentage: calculatedCtr,
     ctrBadgeLabel: `${dispatchedCount} Sent (${calculatedCtr}% Conversion)`,
     isCtrActive: true,
+    hasOrders: true,
   };
 }
 
@@ -69,7 +85,7 @@ export function calculateVelocityMetrics(subscribers: any[]) {
 
   return {
     label:
-      subscribers.length > 0 ? "First Request Recorded" : "No Activity Recorded",
+      subscribers.length > 0 ? "First Request" : "No Activity",
     isPositive: true,
     hasBaseline: false,
   };

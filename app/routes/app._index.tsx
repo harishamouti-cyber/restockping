@@ -125,7 +125,7 @@ export default function RestockOverview() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
+    <div className="min-h-screen bg-[#fafafa] pb-24 font-sans text-zinc-900">
       <ui-title-bar title="Restock Overview">
         <button variant="primary" onClick={handleDeepLinkToTheme}>
           Add to Theme Editor
@@ -136,8 +136,8 @@ export default function RestockOverview() {
       </ui-title-bar>
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Status Strip: Plain Merchant English */}
-        <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-4">
+        {/* Status Strip: Plain Merchant English & Magic UI Luminous Surfaces */}
+        <div className="p-4 bg-white border border-zinc-200/70 rounded-2xl shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)] flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -148,10 +148,10 @@ export default function RestockOverview() {
                 <span className="text-xs font-semibold text-zinc-900 tracking-tight">
                   Smart Restock Pacing: Active
                 </span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50/80 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
                   {multiplier}x Batch Pacing
                 </span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 text-zinc-600 border border-zinc-200">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-zinc-100/80 text-zinc-600 ring-1 ring-inset ring-zinc-300/60">
                   {settings?.dripIntervalMinutes || 120}m Pause Window
                 </span>
               </div>
@@ -163,83 +163,99 @@ export default function RestockOverview() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/app/subscribers?status=DISPATCHED")}
-              className="px-3 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 rounded-lg shadow-xs hover:bg-zinc-50 transition-colors cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200/80 rounded-lg shadow-xs hover:bg-zinc-50 transition-colors cursor-pointer"
             >
               Sent Alert Logs
             </button>
             <button
               onClick={() => navigate("/app/settings")}
-              className="px-3 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 rounded-lg shadow-xs hover:bg-zinc-50 transition-colors cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200/80 rounded-lg shadow-xs hover:bg-zinc-50 transition-colors cursor-pointer"
             >
               Pacing Settings
             </button>
           </div>
         </div>
 
-        {/* 21st.dev Metric Cards: Badges Aligned to Top-Right & Equalized Baselines */}
+        {/* Magic UI Metric Cards: Luminous Accent Rings & State-Machine Synchronization */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Potential Waitlist Revenue */}
-          <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs flex flex-col justify-between">
+          <div className="p-5 bg-white border border-zinc-200/70 rounded-2xl shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)] relative overflow-hidden transition-all duration-200 hover:shadow-md hover:border-zinc-300/80 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono uppercase tracking-wider font-medium text-zinc-400">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
                   Potential Waitlist Revenue
                 </span>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center text-[11px] font-mono font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200 whitespace-nowrap">
-                    {velocity.label === "First Cohort Baseline" ? "First Request" : velocity.label}
-                  </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {metrics.pendingCount === 0 && metrics.totalRegistered > 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium font-mono bg-emerald-50/80 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 shadow-xs whitespace-nowrap">
+                      Queue Cleared
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium font-mono bg-zinc-100/80 text-zinc-600 ring-1 ring-inset ring-zinc-300/60 shadow-xs whitespace-nowrap">
+                      {velocity.label === "First Cohort Baseline" ? "First Request" : velocity.label}
+                    </span>
+                  )}
                   <svg className="w-4 h-4 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                   </svg>
                 </div>
               </div>
-              <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 tabular-nums">
-                ${Number(totalPotentialRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              <div className="text-3xl font-bold font-mono tracking-tight text-zinc-900 tabular-nums">
+                ${metrics.pendingCount === 0 ? "0.00" : Number(totalPotentialRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
             </div>
             <p className="text-xs text-zinc-400 mt-2 min-h-[32px] leading-relaxed">
-              Total value of products customers are waiting to buy
+              {metrics.pendingCount === 0 && metrics.totalRegistered > 0
+                ? "All restock requests have been notified and cleared."
+                : "Total value of products customers are waiting to buy"}
             </p>
           </div>
 
-          {/* Card 2: Customers Waiting */}
-          <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs flex flex-col justify-between">
+          {/* Card 2: Customers Waiting (Primary number: pendingCount) */}
+          <div className="p-5 bg-white border border-zinc-200/70 rounded-2xl shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)] relative overflow-hidden transition-all duration-200 hover:shadow-md hover:border-zinc-300/80 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono uppercase tracking-wider font-medium text-zinc-400">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
                   Customers Waiting
                 </span>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center text-[11px] font-mono font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 whitespace-nowrap">
-                    Queue Ready
-                  </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {metrics.pendingCount === 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium font-mono bg-zinc-100/80 text-zinc-600 ring-1 ring-inset ring-zinc-300/60 shadow-xs whitespace-nowrap">
+                      Queue Empty
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium font-mono bg-emerald-50/80 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 shadow-xs whitespace-nowrap">
+                      Queue Ready
+                    </span>
+                  )}
                   <svg className="w-4 h-4 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
                   </svg>
                 </div>
               </div>
-              <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 tabular-nums">
-                {metrics.totalRegistered}
+              <div className="text-3xl font-bold font-mono tracking-tight text-zinc-900 tabular-nums">
+                {metrics.pendingCount}
               </div>
             </div>
             <p className="text-xs text-zinc-400 mt-2 min-h-[32px] leading-relaxed">
-              Shoppers waiting to be notified when items return to stock
+              {metrics.pendingCount === 0
+                ? "No shoppers currently waiting for inventory."
+                : "Shoppers waiting to be notified when items return to stock"}
             </p>
           </div>
 
-          {/* Card 3: Recovered Sales */}
-          <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs flex flex-col justify-between">
+          {/* Card 3: Recovered Sales & Dispatched Alerts */}
+          <div className="p-5 bg-white border border-zinc-200/70 rounded-2xl shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)] relative overflow-hidden transition-all duration-200 hover:shadow-md hover:border-zinc-300/80 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono uppercase tracking-wider font-medium text-zinc-400">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
                   Recovered Sales
                 </span>
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center text-[11px] font-mono font-medium px-2 py-0.5 rounded border whitespace-nowrap ${
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium font-mono whitespace-nowrap shadow-xs ${
                     metrics.isCtrActive
-                      ? "text-emerald-700 bg-emerald-50 border-emerald-200/60"
-                      : "text-zinc-600 bg-zinc-100 border-zinc-200"
+                      ? "bg-emerald-50/80 text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+                      : "bg-zinc-100/80 text-zinc-600 ring-1 ring-inset ring-zinc-300/60"
                   }`}>
                     {metrics.isCtrActive ? metrics.ctrBadgeLabel : "No alerts sent yet"}
                   </span>
@@ -248,46 +264,65 @@ export default function RestockOverview() {
                   </svg>
                 </div>
               </div>
-              <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 tabular-nums">
+              <div className="text-3xl font-bold font-mono tracking-tight text-zinc-900 tabular-nums">
                 {metrics.convertedCount}
               </div>
             </div>
             <p className="text-xs text-zinc-400 mt-2 min-h-[32px] leading-relaxed">
-              Orders placed directly through 1-click instant checkout links
+              {metrics.dispatchedCount > 0 && metrics.convertedCount === 0
+                ? "Alerts delivered; shoppers have received their 1-click links."
+                : "Orders placed directly through 1-click instant checkout links"}
             </p>
           </div>
         </div>
 
-        {/* Visual Calculation Chips: Live Preview */}
-        <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs space-y-3">
+        {/* Magic UI Dynamic Live Preview Card */}
+        <div className="p-5 bg-white border border-zinc-200/70 rounded-2xl shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-mono uppercase tracking-wider font-semibold text-zinc-700">
-              How Your Alerts Will Send (Live Preview)
-            </h3>
-            <span className="inline-flex items-center text-[10px] font-mono font-medium text-zinc-500 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded">
-              Automatic Pacing Logic
-            </span>
-          </div>
-          
-          {/* Visual Flow Formula Chips */}
-          <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-50 border border-zinc-200/70 rounded-lg text-xs font-mono">
-            <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-zinc-800 font-semibold shadow-xs">
-              4 Units Restocked
-            </span>
-            <span className="text-zinc-400 font-bold">×</span>
-            <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-zinc-800 font-semibold shadow-xs">
-              {settings.dripBatchMultiplier}x Pacing Multiplier
-            </span>
-            <span className="text-zinc-400 font-bold">→</span>
-            <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold rounded-md shadow-xs flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Notifies {calculatedBatch} {calculatedBatch === 1 ? "Customer" : "Customers"} Immediately
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <h3 className="text-xs font-mono uppercase tracking-wider font-semibold text-zinc-700">
+                How Your Alerts Will Send (Live Preview)
+              </h3>
+            </div>
+            <span className="inline-flex items-center text-[10px] font-mono font-medium text-zinc-500 bg-zinc-100/80 ring-1 ring-inset ring-zinc-200 px-2.5 py-0.5 rounded-full">
+              Pacing Engine Active
             </span>
           </div>
 
-          <p className="text-xs text-zinc-500 leading-relaxed">
-            We pace alerts proportionally to available inventory so multiple customers don't rush the site for the same item and encounter an instant restock outage.
-          </p>
+          {metrics.pendingCount > 0 ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-50/80 border border-zinc-200/60 rounded-xl text-xs font-mono">
+                <span className="px-2.5 py-1 bg-white border border-zinc-200/80 rounded-lg text-zinc-800 font-semibold shadow-xs">
+                  4 Units Restocked
+                </span>
+                <span className="text-zinc-400 font-bold">×</span>
+                <span className="px-2.5 py-1 bg-white border border-zinc-200/80 rounded-lg text-zinc-800 font-semibold shadow-xs">
+                  {settings.dripBatchMultiplier}x Pacing
+                </span>
+                <span className="text-zinc-400 font-bold">→</span>
+                <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold rounded-lg shadow-xs flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Notifies {calculatedBatch} {calculatedBatch === 1 ? "Customer" : "Customers"} Immediately
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Pacing releases notifications proportionally to inventory, giving shoppers a fair chance to purchase before stock depletes.
+              </p>
+            </>
+          ) : (
+            <div className="p-3.5 bg-zinc-50/80 border border-zinc-200/60 rounded-xl text-xs text-zinc-600 leading-relaxed flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200/60 flex items-center justify-center shrink-0 text-emerald-600 font-semibold">
+                ✓
+              </div>
+              <div>
+                <span className="font-semibold text-zinc-900 block">All caught up! No customers currently waiting.</span>
+                <span className="text-zinc-500">
+                  When new shoppers join your waitlist, restocking items will automatically release notifications in controlled {settings.dripBatchMultiplier}x batches.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Top In-Demand Out-of-Stock SKUs Table */}
