@@ -5,14 +5,14 @@ export function LivePipelineNodes({ pendingCount = 0 }: { pendingCount: number }
     {
       num: "01",
       badge: "Active on Store",
-      badgeClass: "text-emerald-700 bg-emerald-50 ring-emerald-500/20",
+      badgeClass: "text-[#1a5c2e] bg-[#e3f1df] border-[#c1e5ba]",
       title: "Storefront Signup Box",
       desc: "Captures shopper interest cleanly without slowing down your store pages.",
     },
     {
       num: "02",
       badge: "Instant Sync",
-      badgeClass: "text-emerald-700 bg-emerald-50 ring-emerald-500/20",
+      badgeClass: "text-[#1a5c2e] bg-[#e3f1df] border-[#c1e5ba]",
       title: "Inventory Detection",
       desc: "Detects stock additions the instant you adjust inventory in Shopify.",
     },
@@ -20,54 +20,54 @@ export function LivePipelineNodes({ pendingCount = 0 }: { pendingCount: number }
       num: "03",
       badge: `${pendingCount} Waiting`,
       badgeClass: pendingCount > 0 
-        ? "text-emerald-700 bg-emerald-50 ring-emerald-500/20" 
-        : "text-slate-600 bg-slate-100 ring-slate-200",
+        ? "text-[#1a5c2e] bg-[#e3f1df] border-[#c1e5ba]" 
+        : "text-[#616161] bg-[#f1f1f1] border-[#e1e3e5]",
       title: "Paced Group Alerts",
       desc: "Notifies customers in balanced batches so items don't sell out instantly.",
     },
     {
       num: "04",
       badge: "1-Click Checkout",
-      badgeClass: "text-emerald-700 bg-emerald-50 ring-emerald-500/20",
+      badgeClass: "text-[#1a5c2e] bg-[#e3f1df] border-[#c1e5ba]",
       title: "Direct Checkout Link",
       desc: "Sends shoppers straight to checkout with their item already pre-filled.",
     },
   ];
 
   return (
-    <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs space-y-4">
+    <div className="p-5 bg-white border border-[#e1e3e5] rounded-xl shadow-xs space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[11px] font-sans uppercase tracking-wider font-semibold text-slate-900">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#303030]">
             How a Restock Turns into a Sale
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#616161] mt-0.5">
             The automated journey from customer signup to completed purchase
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#e3f1df] text-[#1a5c2e] border border-[#c1e5ba]">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
           All Systems Working
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {steps.map((step) => (
           <div
             key={step.num}
-            className="p-4 bg-slate-50/70 border border-slate-200/60 rounded-xl flex flex-col justify-between hover:bg-white hover:border-slate-300 hover:shadow-xs transition-all"
+            className="p-3.5 bg-[#fafafa] border border-[#e1e3e5] rounded-lg flex flex-col justify-between hover:bg-white hover:border-[#c9cccf] transition-all"
           >
             <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[11px] font-sans text-slate-400 font-semibold tracking-wider">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-medium text-[#616161]">
                   STEP {step.num}
                 </span>
-                <span className={`text-[10px] font-medium ring-1 ring-inset px-2 py-0.5 rounded-full ${step.badgeClass}`}>
+                <span className={`text-[10px] font-medium border px-2 py-0.5 rounded-full ${step.badgeClass}`}>
                   {step.badge}
                 </span>
               </div>
-              <h4 className="text-xs font-semibold text-slate-900 mb-1">{step.title}</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+              <h4 className="text-xs font-semibold text-[#303030] mb-1">{step.title}</h4>
+              <p className="text-xs text-[#616161] leading-relaxed">{step.desc}</p>
             </div>
           </div>
         ))}

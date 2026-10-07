@@ -107,7 +107,7 @@ export default function RestockOverview() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/60 pb-28 font-sans text-slate-900">
+    <div className="min-h-screen bg-[#f1f1f1] pb-24 font-sans text-[#303030]">
       <ui-title-bar title="Restock Overview">
         <button variant="primary" onClick={handleThemeDeepLink}>
           Add to Theme Editor
@@ -117,74 +117,73 @@ export default function RestockOverview() {
         </button>
       </ui-title-bar>
 
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Dribbble-Style Ambient Status Hero Banner */}
-        <div className="bg-gradient-to-r from-emerald-50/60 via-teal-50/30 to-white border border-emerald-100 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="relative flex h-3 w-3">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+        {/* Polaris Status Banner */}
+        <div className="bg-white border border-[#e1e3e5] rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 ring-2 ring-emerald-100" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-900 tracking-tight">
+                <span className="text-sm font-semibold text-[#303030]">
                   Automatic Restock Alerts: Running
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100/70 text-emerald-800 ring-1 ring-emerald-600/20">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#e3f1df] text-[#1a5c2e] border border-[#c1e5ba]">
                   Smart Protection Active
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f1f1] text-[#616161] border border-[#e1e3e5]">
                   Paced 2 Hours Apart
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-[#616161] mt-0.5">
                 Connected to store inventory · Automatically checks and sends alerts when stock is added
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/app/subscribers?status=DISPATCHED")}
-              className="px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white border border-slate-200/80 rounded-xl shadow-xs hover:bg-slate-50 transition-all cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium text-[#303030] bg-white border border-[#c9cccf] rounded-lg shadow-xs hover:bg-[#f6f6f7] transition-all cursor-pointer"
             >
               View Alert History
             </button>
             <button
               onClick={() => navigate("/app/settings")}
-              className="px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white border border-slate-200/80 rounded-xl shadow-xs hover:bg-slate-50 transition-all cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium text-[#303030] bg-white border border-[#c9cccf] rounded-lg shadow-xs hover:bg-[#f6f6f7] transition-all cursor-pointer"
             >
               Alert Settings
             </button>
           </div>
         </div>
 
-        {/* 3 Metric Cards: Dribbble Polish with Equal Baselines */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* 3 Metric Cards: Exact Shopify Admin Analytics Polaris Tokens */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Potential Waitlist Revenue */}
-          <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 font-sans">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-[#616161]">
                   Potential Waitlist Revenue
                 </span>
                 <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${
                     isWaitlistActive
-                      ? "bg-emerald-50 text-emerald-700 ring-emerald-500/20"
-                      : "bg-slate-100 text-slate-600 ring-slate-200"
+                      ? "bg-[#e3f1df] text-[#1a5c2e] border-[#c1e5ba]"
+                      : "bg-[#f1f1f1] text-[#616161] border-[#e1e3e5]"
                   }`}
                 >
                   {isWaitlistActive ? "Active Demand" : "All Caught Up"}
                 </span>
               </div>
-              <div className="flex items-baseline font-sans">
-                <span className="text-2xl font-medium text-slate-400 mr-1 select-none">$</span>
-                <span className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
-                  {Number(totalPotentialRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="flex items-baseline gap-0.5 mt-1">
+                <span className="text-[28px] font-semibold text-[#303030] tracking-[-0.03em] leading-8 tabular-nums font-sans">
+                  ${Number(totalPotentialRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mt-3 min-h-[32px] leading-relaxed">
+            <p className="text-xs text-[#616161] mt-2 leading-normal">
               {isWaitlistActive
                 ? "Total value of products shoppers are waiting to purchase"
                 : "All restock requests have been notified and cleared"}
@@ -192,29 +191,29 @@ export default function RestockOverview() {
           </div>
 
           {/* Card 2: Customers Waiting */}
-          <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 font-sans">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-[#616161]">
                   Customers Waiting
                 </span>
                 <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${
                     isWaitlistActive
-                      ? "bg-emerald-50 text-emerald-700 ring-emerald-500/20"
-                      : "bg-slate-100 text-slate-600 ring-slate-200"
+                      ? "bg-[#e3f1df] text-[#1a5c2e] border-[#c1e5ba]"
+                      : "bg-[#f1f1f1] text-[#616161] border-[#e1e3e5]"
                   }`}
                 >
                   {isWaitlistActive ? "Ready to Notify" : "Waitlist Clear"}
                 </span>
               </div>
-              <div className="font-sans">
-                <span className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
+              <div className="flex items-baseline gap-0.5 mt-1">
+                <span className="text-[28px] font-semibold text-[#303030] tracking-[-0.03em] leading-8 tabular-nums font-sans">
                   {metrics.pendingCount}
                 </span>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mt-3 min-h-[32px] leading-relaxed">
+            <p className="text-xs text-[#616161] mt-2 leading-normal">
               {isWaitlistActive
                 ? "Shoppers waiting to be notified when items are restocked"
                 : "No customers currently waiting for sold-out items"}
@@ -222,83 +221,139 @@ export default function RestockOverview() {
           </div>
 
           {/* Card 3: Recovered Sales */}
-          <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 font-sans">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-[#616161]">
                   Recovered Sales
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 ring-1 ring-slate-200">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f1f1] text-[#616161] border border-[#e1e3e5]">
                   {metrics.dispatchedCount > 0
                     ? `${metrics.dispatchedCount} Sent (Awaiting Order)`
                     : "No Alerts Sent Yet"}
                 </span>
               </div>
-              <div className="font-sans">
-                <span className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
+              <div className="flex items-baseline gap-0.5 mt-1">
+                <span className="text-[28px] font-semibold text-[#303030] tracking-[-0.03em] leading-8 tabular-nums font-sans">
                   {metrics.convertedCount}
                 </span>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mt-3 min-h-[32px] leading-relaxed">
+            <p className="text-xs text-[#616161] mt-2 leading-normal">
               Orders placed directly through 1-click instant checkout links
             </p>
           </div>
         </div>
 
-        {/* How RestockPing Protects Your Store (Dynamic Mobbin Card) */}
-        <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-sans uppercase tracking-wider font-semibold text-slate-700">
-              How RestockPing Protects Your Inventory
-            </h3>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500/20">
-              Protection Active
-            </span>
+        {/* Dense Polaris Two-Column Layout (8 col main / 4 col sidebar) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Main Column (8 cols): High Priority Operations */}
+          <div className="lg:col-span-8 space-y-4">
+            {/* Top In-Demand SKUs Table */}
+            <TopDemandProducts products={topDemandList} />
+
+            {/* Step-by-Step Customer Journey */}
+            <LivePipelineNodes pendingCount={metrics.pendingCount} />
           </div>
 
-          {isWaitlistActive ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2.5 p-3.5 bg-slate-50/80 border border-slate-200/60 rounded-xl text-xs font-sans">
-                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-800 font-medium shadow-xs">
-                  4 Units Restocked
-                </span>
-                <span className="text-slate-400 font-semibold">×</span>
-                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-800 font-medium shadow-xs">
-                  {multiplier}x Safe Multiplier
-                </span>
-                <span className="text-slate-400 font-semibold">→</span>
-                <span className="px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold rounded-lg shadow-xs flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Notifies {calculatedSafeBatch} {calculatedSafeBatch === 1 ? "Customer" : "Customers"} Immediately
+          {/* Sidebar Column (4 cols): Restock Protection Engine & Storefront Health */}
+          <div className="lg:col-span-4 space-y-4">
+            {/* Restock Protection Engine Card */}
+            <div className="p-5 bg-white border border-[#e1e3e5] rounded-xl shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[#303030]">
+                    Restock Protection
+                  </h3>
+                  <p className="text-xs text-[#616161] mt-0.5">
+                    Prevents instant stockout surges
+                  </p>
+                </div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#e3f1df] text-[#1a5c2e] border border-[#c1e5ba]">
+                  Active
                 </span>
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Notifications are sent in controlled groups so multiple shoppers do not rush to purchase the same single restocked item and hit a sudden stockout.
-              </p>
-            </>
-          ) : (
-            <div className="p-4 bg-slate-50/80 border border-slate-200/60 rounded-xl text-xs text-slate-600 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-100/70 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
-                ✓
+
+              {isWaitlistActive ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f6f6f7] border border-[#e1e3e5] rounded-lg text-xs font-medium">
+                    <span className="px-2.5 py-1 bg-white border border-[#c9cccf] rounded text-[#303030]">
+                      4 Restocked
+                    </span>
+                    <span className="text-[#616161]">×</span>
+                    <span className="px-2.5 py-1 bg-white border border-[#c9cccf] rounded text-[#303030]">
+                      {multiplier}x Safe Multiplier
+                    </span>
+                    <span className="text-[#616161]">→</span>
+                    <span className="px-2.5 py-1 bg-[#e3f1df] border border-[#c1e5ba] text-[#1a5c2e] rounded flex items-center gap-1.5 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                      Notifies {calculatedSafeBatch} Customers
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#616161] leading-relaxed">
+                    Shoppers are notified in controlled cohorts so multiple buyers don't race to checkout and experience immediate "Sold Out" frustration.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-[#f6f6f7] border border-[#e1e3e5] rounded-lg text-xs text-[#616161] flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-[#e3f1df] text-[#1a5c2e] flex items-center justify-center font-bold text-xs shrink-0">
+                    ✓
+                  </div>
+                  <div>
+                    <span className="font-semibold text-[#303030] block">
+                      All caught up! Waitlist is clear.
+                    </span>
+                    <span className="text-[#616161]">
+                      When customers sign up for sold-out items, RestockPing will automatically schedule safe alerts upon restock.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Storefront & Automation Status */}
+            <div className="p-5 bg-white border border-[#e1e3e5] rounded-xl shadow-xs space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#303030]">
+                Storefront Integration
+              </h3>
+              <div className="divide-y divide-[#e1e3e5] text-xs">
+                <div className="py-2.5 flex items-center justify-between">
+                  <span className="text-[#616161]">Inventory Sync</span>
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live & Connected
+                  </span>
+                </div>
+                <div className="py-2.5 flex items-center justify-between">
+                  <span className="text-[#616161]">Batch Multiplier</span>
+                  <span className="font-medium text-[#303030]">{multiplier}x inventory</span>
+                </div>
+                <div className="py-2.5 flex items-center justify-between">
+                  <span className="text-[#616161]">Pause Interval</span>
+                  <span className="font-medium text-[#303030]">{settings.dripIntervalMinutes || 120} minutes</span>
+                </div>
+                <div className="py-2.5 flex items-center justify-between">
+                  <span className="text-[#616161]">Store Domain</span>
+                  <span className="font-medium text-[#303030] truncate max-w-[150px]">{shop}</span>
+                </div>
               </div>
-              <div>
-                <span className="font-semibold text-slate-900 block">
-                  All caught up! No shoppers are currently waiting.
-                </span>
-                <span className="text-slate-500">
-                  When a customer joins your waitlist, RestockPing will automatically schedule safe, paced notifications the moment you add new inventory.
-                </span>
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  onClick={() => navigate("/app/subscribers")}
+                  className="w-full py-2 px-3 text-xs font-medium text-[#303030] bg-[#f6f6f7] hover:bg-[#e1e3e5] border border-[#c9cccf] rounded-lg transition-all text-center cursor-pointer"
+                >
+                  Manage All Subscribers →
+                </button>
+                <button
+                  onClick={handleThemeDeepLink}
+                  className="w-full py-2 px-3 text-xs font-medium text-[#005bd3] bg-white hover:bg-slate-50 border border-[#c9cccf] rounded-lg transition-all text-center cursor-pointer"
+                >
+                  Customize Button in Theme
+                </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
-
-        {/* Top Requested SKUs Micro-Table */}
-        <TopDemandProducts products={topDemandList} />
-
-        {/* Step-by-Step Customer Journey (Zero DSA Jargon) */}
-        <LivePipelineNodes pendingCount={metrics.pendingCount} />
       </main>
     </div>
   );
