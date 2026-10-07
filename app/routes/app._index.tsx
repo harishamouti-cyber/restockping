@@ -160,10 +160,10 @@ export default function RestockOverview() {
                 {isWaitlistActive ? "Active" : "All caught up"}
               </span>
             </div>
-            <div className="text-[20px] font-semibold text-[#202223] leading-6 tracking-[-0.01em] tabular-nums mt-1 font-sans">
+            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
               ${totalPotentialRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[11px] text-[#8c9196] mt-1 truncate">
+            <div className="text-[11px] text-[#8c9196] mt-1 truncate font-sans">
               {isWaitlistActive ? "Customer intent across sold-out items" : "All requests notified and cleared"}
             </div>
           </div>
@@ -180,11 +180,11 @@ export default function RestockOverview() {
                 {isWaitlistActive ? "Ready" : "Clear"}
               </span>
             </div>
-            <div className="text-[20px] font-semibold text-[#202223] leading-6 tracking-[-0.01em] tabular-nums mt-1 font-sans">
+            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
               {metrics.pendingCount}
             </div>
-            <div className="text-[11px] text-[#8c9196] mt-1 truncate">
-              {isWaitlistActive ? "Shoppers awaiting restock notification" : "No customers currently in queue"}
+            <div className="text-[11px] text-[#8c9196] mt-1 truncate font-sans">
+              {isWaitlistActive ? "Shoppers awaiting restock notification" : "No shoppers currently waiting"}
             </div>
           </div>
 
@@ -198,65 +198,73 @@ export default function RestockOverview() {
                 {metrics.dispatchedCount > 0 ? `${metrics.dispatchedCount} sent` : "0 sent"}
               </span>
             </div>
-            <div className="text-[20px] font-semibold text-[#202223] leading-6 tracking-[-0.01em] tabular-nums mt-1 font-sans">
+            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
               {metrics.convertedCount}
             </div>
-            <div className="text-[11px] text-[#8c9196] mt-1 truncate">
+            <div className="text-[11px] text-[#8c9196] mt-1 truncate font-sans">
               Orders placed via 1-click checkout links
             </div>
           </div>
         </div>
 
-        {/* 2-Column Balanced Grid (High Density) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+        {/* 2-Column Balanced Grid (High Density with Equalized Heights) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
           {/* Left Column (7 of 12 cols): Top Requested SKUs */}
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7 h-full">
             <TopDemandProducts products={topDemandList} />
           </div>
 
           {/* Right Column (5 of 12 cols): Restock Protection Simulator */}
-          <div className="lg:col-span-5 p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-medium text-[#202223]">
-                Restock protection
-              </span>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#e3f1df] text-[#008060]">
-                Active ({multiplier}x)
-              </span>
+          <div className="lg:col-span-5 h-full p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-[13px] font-medium text-[#202223]">
+                  Restock protection
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#e3f1df] text-[#008060]">
+                  Active ({multiplier}x)
+                </span>
+              </div>
+
+              {isWaitlistActive ? (
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 p-2 bg-[#f6f6f7] border border-[#e1e3e5] rounded text-xs font-normal text-[#202223]">
+                    <span className="px-1.5 py-0.5 bg-white border border-[#d2d5d8] rounded font-medium">
+                      4 units added
+                    </span>
+                    <span className="text-[#8c9196]">×</span>
+                    <span className="px-1.5 py-0.5 bg-white border border-[#d2d5d8] rounded font-medium">
+                      {multiplier}x
+                    </span>
+                    <span className="text-[#8c9196]">→</span>
+                    <span className="px-1.5 py-0.5 bg-[#e3f1df] text-[#008060] rounded font-semibold">
+                      Notifies {calculatedBatch} shoppers
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#616161] leading-relaxed">
+                    Paced dispatch prevents inventory burnout so shoppers don't encounter immediate stockouts.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-[#f6f6f7] border border-[#e1e3e5] rounded-md text-xs text-[#202223] flex items-center gap-2.5">
+                  <div className="w-5 h-5 rounded-full bg-[#e3f1df] text-[#008060] flex items-center justify-center font-bold text-[11px] shrink-0">
+                    ✓
+                  </div>
+                  <div className="text-[11px] leading-snug">
+                    <span className="font-medium block text-[#202223]">Waitlist is clear.</span>
+                    <span className="text-[#616161]">
+                      Restocked items will automatically alert customers in safe {multiplier}x batches.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {isWaitlistActive ? (
-              <div className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-1.5 p-2 bg-[#f6f6f7] border border-[#e1e3e5] rounded text-xs font-normal text-[#202223]">
-                  <span className="px-1.5 py-0.5 bg-white border border-[#d2d5d8] rounded font-medium">
-                    4 units added
-                  </span>
-                  <span className="text-[#8c9196]">×</span>
-                  <span className="px-1.5 py-0.5 bg-white border border-[#d2d5d8] rounded font-medium">
-                    {multiplier}x
-                  </span>
-                  <span className="text-[#8c9196]">→</span>
-                  <span className="px-1.5 py-0.5 bg-[#e3f1df] text-[#008060] rounded font-semibold">
-                    Notifies {calculatedBatch} shoppers
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#616161] leading-relaxed">
-                  Paced dispatch prevents inventory burnout so shoppers don't encounter immediate stockouts.
-                </p>
-              </div>
-            ) : (
-              <div className="p-2.5 bg-[#f6f6f7] border border-[#e1e3e5] rounded text-xs text-[#202223] flex items-center gap-2.5">
-                <div className="w-5 h-5 rounded-full bg-[#e3f1df] text-[#008060] flex items-center justify-center font-bold text-[11px] shrink-0">
-                  ✓
-                </div>
-                <div className="text-[11px] leading-snug">
-                  <span className="font-medium block text-[#202223]">Waitlist is clear.</span>
-                  <span className="text-[#616161]">
-                    Restocked items will automatically alert customers in safe {multiplier}x batches.
-                  </span>
-                </div>
-              </div>
-            )}
+            {/* Quick Pacing Summary Strip to Perfectly Balance Card Height */}
+            <div className="pt-2.5 mt-2 border-t border-[#f1f2f4] flex items-center justify-between text-[11px] text-[#8c9196]">
+              <span>Next check: <strong className="text-[#202223] font-medium">Automatic</strong></span>
+              <span>Batch window: <strong className="text-[#202223] font-medium">{settings?.dripIntervalMinutes || 120}m</strong></span>
+            </div>
           </div>
         </div>
 
