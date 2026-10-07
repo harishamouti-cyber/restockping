@@ -15,70 +15,65 @@ export function TopDemandProducts({ products = [] }: { products: ProductDemand[]
   const navigate = useNavigate();
 
   return (
-    <div className="p-5 bg-white border border-[#e1e3e5] rounded-xl shadow-xs space-y-4">
+    <div className="p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-2.5">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#303030]">
-            Top Requested Sold-Out Products
-          </h3>
-          <p className="text-xs text-[#616161] mt-0.5">
-            Products with shoppers waiting for restock alerts
-          </p>
+          <span className="text-[13px] font-medium text-[#202223] block">
+            Top requested products
+          </span>
+          <span className="text-[11px] text-[#8c9196]">
+            Sold-out products with active customer interest
+          </span>
         </div>
         <button
           onClick={() => navigate("/app/subscribers")}
-          className="text-xs font-medium text-[#005bd3] hover:underline cursor-pointer"
+          className="text-xs font-medium text-[#008060] hover:underline cursor-pointer"
         >
-          View Full Waitlist →
+          View all →
         </button>
       </div>
 
       {products.length === 0 ? (
-        <div className="py-8 px-4 text-center flex flex-col items-center justify-center border border-dashed border-[#e1e3e5] rounded-lg bg-[#fafafa]">
-          <div className="w-8 h-8 rounded-full bg-[#e3f1df] border border-[#c1e5ba] flex items-center justify-center text-[#1a5c2e] mb-2 shadow-xs">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <span className="text-xs font-semibold text-[#303030]">All Products In Stock</span>
-          <p className="text-xs text-[#616161] max-w-sm mt-1">
-            There are currently no customer waitlist requests. When a shopper signs up for a sold-out item, it will automatically appear here.
+        <div className="py-5 px-3 text-center flex flex-col items-center justify-center border border-dashed border-[#d2d5d8] rounded bg-[#f6f6f7]">
+          <span className="text-xs font-medium text-[#202223]">All products in stock</span>
+          <p className="text-[11px] text-[#8c9196] max-w-xs mt-0.5 leading-normal">
+            No active customer waitlist requests. When shoppers opt into sold-out items, they will appear here.
           </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-[#e1e3e5] text-[#616161] uppercase text-[11px] font-medium tracking-wider">
-                <th className="pb-2.5 font-medium">Product / Variant</th>
-                <th className="pb-2.5 font-medium">Price</th>
-                <th className="pb-2.5 font-medium">Shoppers Waiting</th>
-                <th className="pb-2.5 font-medium">Potential Revenue</th>
-                <th className="pb-2.5 font-medium text-right">Actions</th>
+              <tr className="border-b border-[#e1e3e5] text-[#616161] text-[11px] font-medium">
+                <th className="pb-1.5 font-normal">Product</th>
+                <th className="pb-1.5 font-normal">Price</th>
+                <th className="pb-1.5 font-normal">Waiting</th>
+                <th className="pb-1.5 font-normal">Revenue</th>
+                <th className="pb-1.5 font-normal text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e1e3e5]">
+            <tbody className="divide-y divide-[#f1f2f4]">
               {products.map((item) => (
-                <tr key={item.variantId} className="group hover:bg-[#f6f6f7] transition-colors">
-                  <td className="py-2.5 pr-4">
-                    <span className="font-medium text-[#303030] block">{item.productTitle}</span>
-                    <span className="text-[#616161] text-[11px] block">{item.variantTitle}</span>
+                <tr key={item.variantId} className="hover:bg-[#f6f6f7] transition-colors">
+                  <td className="py-2 pr-2">
+                    <span className="font-medium text-[#202223] block truncate max-w-[180px]">{item.productTitle}</span>
+                    <span className="text-[#8c9196] text-[10px]">{item.variantTitle}</span>
                   </td>
-                  <td className="py-2.5 font-sans font-medium text-[#616161] tabular-nums">
+                  <td className="py-2 text-[#202223] tabular-nums font-normal">
                     ${item.price.toFixed(2)}
                   </td>
-                  <td className="py-2.5 font-sans">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f1f1] text-[#303030] border border-[#e1e3e5]">
-                      {item.subscribersCount} {item.subscribersCount === 1 ? "customer" : "customers"}
+                  <td className="py-2">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-[#f1f2f4] text-[#202223]">
+                      {item.subscribersCount}
                     </span>
                   </td>
-                  <td className="py-2.5 font-sans font-semibold text-[#303030] tabular-nums">
+                  <td className="py-2 font-medium text-[#202223] tabular-nums">
                     ${item.totalDemand.toFixed(2)}
                   </td>
-                  <td className="py-2.5 text-right">
+                  <td className="py-2 text-right">
                     <button
                       onClick={() => navigate(`/app/subscribers?q=${encodeURIComponent(item.productTitle)}`)}
-                      className="px-2.5 py-1 text-xs font-medium text-[#303030] bg-white border border-[#c9cccf] rounded-lg hover:bg-[#f6f6f7] shadow-xs transition-all cursor-pointer"
+                      className="px-2 py-0.5 text-xs text-[#202223] bg-white border border-[#d2d5d8] rounded hover:bg-[#f6f6f7] cursor-pointer"
                     >
                       View
                     </button>
