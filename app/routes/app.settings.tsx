@@ -65,7 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json(
         {
           success: false,
-          error: `Delivery failed: ${err.message}. Please check SMTP configuration in .env.`,
+          error: `Delivery failed: ${err.message}`,
         },
         { status: 400 }
       );

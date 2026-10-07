@@ -17,28 +17,37 @@ export interface SendRestockEmailOptions {
   discountCode?: string;
 }
 
+const DEFAULT_SMTP_HOST = "smtp.gmail.com";
+const DEFAULT_SMTP_PORT = 465;
+const DEFAULT_SMTP_USER = "harishamouti@gmail.com";
+const DEFAULT_SMTP_PASS = "rzxrokwomyiycgwo";
+const DEFAULT_SMTP_FROM_NAME = "RestockPing Alerts";
+
+export function getSmtpConfig() {
+  const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || String(DEFAULT_SMTP_PORT), 10);
+  const secure = process.env.SMTP_SECURE === "true" || port === 465;
+  const user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
+  const pass = (process.env.SMTP_PASS || DEFAULT_SMTP_PASS).replace(/\s+/g, "");
+  const fromName = process.env.SMTP_FROM_NAME || DEFAULT_SMTP_FROM_NAME;
+
+  return { host, port, secure, user, pass, fromName };
+}
+
 let transporter: nodemailer.Transporter | null = null;
 
 export function getTransporter() {
   if (transporter) return transporter;
 
-  const host = process.env.SMTP_HOST || "smtp.gmail.com";
-  const port = parseInt(process.env.SMTP_PORT || "465", 10);
-  const secure = process.env.SMTP_SECURE === "true" || port === 465;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!user || !pass) {
-    throw new Error("SMTP credentials missing. Please define SMTP_USER and SMTP_PASS in your .env file.");
-  }
+  const { host, port, secure, user, pass } = getSmtpConfig();
 
   transporter = nodemailer.createTransport({
     host,
     port,
     secure,
     auth: {
-      user: user.trim(),
-      pass: pass.replace(/\s+/g, ""), // Sanitize out any whitespace
+      user,
+      pass,
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
@@ -135,6 +144,8 @@ export function generateRestockEmailHtml(params: {
 }
 
 export async function sendRestockNotificationEmail(options: SendRestockEmailOptions) {
+  const { user, fromName } = getSmtpConfig();
+
   const {
     to,
     shop,
@@ -142,7 +153,7 @@ export async function sendRestockNotificationEmail(options: SendRestockEmailOpti
     variantTitle,
     price,
     variantId,
-    senderName = process.env.SMTP_FROM_NAME || "Restock Alerts",
+    senderName = fromName,
     replyTo,
     subjectTemplate = "Back in Stock: {{product_title}} is ready to ship",
     headlineText = "Your item is back in stock",
@@ -173,9 +184,9 @@ export async function sendRestockNotificationEmail(options: SendRestockEmailOpti
   });
 
   const info = await mailClient.sendMail({
-    from: `"${senderName}" <${process.env.SMTP_USER}>`,
+    from: `"${senderName}" <${user}>`,
     to,
-    replyTo: replyTo || process.env.SMTP_USER,
+    replyTo: replyTo || user,
     subject,
     html,
   });
