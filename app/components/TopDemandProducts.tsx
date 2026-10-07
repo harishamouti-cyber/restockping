@@ -18,7 +18,7 @@ export function TopDemandProducts({ products = [] }: { products: ProductDemand[]
     <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-700">
+          <h3 className="text-[11px] font-sans uppercase tracking-wider font-semibold text-slate-700">
             Top Requested Sold-Out Products
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -49,7 +49,7 @@ export function TopDemandProducts({ products = [] }: { products: ProductDemand[]
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-100 text-slate-400 font-mono uppercase text-[10px]">
+              <tr className="border-b border-slate-100 text-slate-400 font-sans uppercase font-semibold text-[11px] tracking-wider">
                 <th className="pb-2.5 font-medium">Product / Variant</th>
                 <th className="pb-2.5 font-medium">Price</th>
                 <th className="pb-2.5 font-medium">Shoppers Waiting</th>
@@ -64,15 +64,15 @@ export function TopDemandProducts({ products = [] }: { products: ProductDemand[]
                     <span className="font-semibold text-slate-900 block">{item.productTitle}</span>
                     <span className="text-slate-400 text-[11px] block">{item.variantTitle}</span>
                   </td>
-                  <td className="py-3 font-mono text-slate-600 tabular-nums">
+                  <td className="py-3 font-sans font-medium text-slate-600 tabular-nums">
                     ${item.price.toFixed(2)}
                   </td>
-                  <td className="py-3 font-mono">
+                  <td className="py-3 font-sans">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 ring-1 ring-slate-200">
                       {item.subscribersCount} {item.subscribersCount === 1 ? "customer" : "customers"}
                     </span>
                   </td>
-                  <td className="py-3 font-mono font-semibold text-slate-900 tabular-nums">
+                  <td className="py-3 font-sans font-semibold text-slate-900 tabular-nums">
                     ${item.totalDemand.toFixed(2)}
                   </td>
                   <td className="py-3 text-right">

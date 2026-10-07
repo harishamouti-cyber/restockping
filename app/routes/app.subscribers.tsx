@@ -169,22 +169,22 @@ export default function SubscribersPage() {
         {/* Metric Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Total Customers</span>
-            <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 tabular-nums mt-1">
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-zinc-400 font-sans">Total Customers</span>
+            <div className="text-3xl font-semibold tracking-tight text-zinc-950 tabular-nums mt-1 font-sans">
               {totalCount}
             </div>
             <p className="text-xs text-zinc-400 mt-1">All recorded storefront signups</p>
           </div>
           <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Waiting to Notify</span>
-            <div className="text-2xl font-bold font-mono tracking-tight text-amber-600 tabular-nums mt-1">
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-zinc-400 font-sans">Waiting to Notify</span>
+            <div className="text-3xl font-semibold tracking-tight text-amber-600 tabular-nums mt-1 font-sans">
               {pendingCount}
             </div>
             <p className="text-xs text-zinc-400 mt-1">Shoppers waiting for restock alerts</p>
           </div>
           <div className="p-4 bg-white border border-zinc-200/80 rounded-xl shadow-xs">
-            <span className="text-xs font-mono uppercase text-zinc-400 font-medium">Alerts Sent & Ordered</span>
-            <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600 tabular-nums mt-1">
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-zinc-400 font-sans">Alerts Sent & Ordered</span>
+            <div className="text-3xl font-semibold tracking-tight text-emerald-600 tabular-nums mt-1 font-sans">
               {dispatchedCount}
             </div>
             <p className="text-xs text-zinc-400 mt-1">Alerts successfully sent to customers</p>

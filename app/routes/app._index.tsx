@@ -164,7 +164,7 @@ export default function RestockOverview() {
           <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-400">
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 font-sans">
                   Potential Waitlist Revenue
                 </span>
                 <span
@@ -177,8 +177,11 @@ export default function RestockOverview() {
                   {isWaitlistActive ? "Active Demand" : "All Caught Up"}
                 </span>
               </div>
-              <div className="text-3xl font-bold font-mono tracking-tight text-slate-900 tabular-nums">
-                ${Number(totalPotentialRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              <div className="flex items-baseline font-sans">
+                <span className="text-2xl font-medium text-slate-400 mr-1 select-none">$</span>
+                <span className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
+                  {Number(totalPotentialRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
             <p className="text-xs text-slate-500 mt-3 min-h-[32px] leading-relaxed">
@@ -192,7 +195,7 @@ export default function RestockOverview() {
           <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-400">
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 font-sans">
                   Customers Waiting
                 </span>
                 <span
@@ -205,8 +208,10 @@ export default function RestockOverview() {
                   {isWaitlistActive ? "Ready to Notify" : "Waitlist Clear"}
                 </span>
               </div>
-              <div className="text-3xl font-bold font-mono tracking-tight text-slate-900 tabular-nums">
-                {metrics.pendingCount}
+              <div className="font-sans">
+                <span className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
+                  {metrics.pendingCount}
+                </span>
               </div>
             </div>
             <p className="text-xs text-slate-500 mt-3 min-h-[32px] leading-relaxed">
@@ -220,7 +225,7 @@ export default function RestockOverview() {
           <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-400">
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 font-sans">
                   Recovered Sales
                 </span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 ring-1 ring-slate-200">
@@ -229,8 +234,10 @@ export default function RestockOverview() {
                     : "No Alerts Sent Yet"}
                 </span>
               </div>
-              <div className="text-3xl font-bold font-mono tracking-tight text-slate-900 tabular-nums">
-                {metrics.convertedCount}
+              <div className="font-sans">
+                <span className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
+                  {metrics.convertedCount}
+                </span>
               </div>
             </div>
             <p className="text-xs text-slate-500 mt-3 min-h-[32px] leading-relaxed">
@@ -242,7 +249,7 @@ export default function RestockOverview() {
         {/* How RestockPing Protects Your Store (Dynamic Mobbin Card) */}
         <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs space-y-3.5">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-700">
+            <h3 className="text-[11px] font-sans uppercase tracking-wider font-semibold text-slate-700">
               How RestockPing Protects Your Inventory
             </h3>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500/20">
@@ -252,15 +259,15 @@ export default function RestockOverview() {
 
           {isWaitlistActive ? (
             <>
-              <div className="flex flex-wrap items-center gap-2.5 p-3.5 bg-slate-50/80 border border-slate-200/60 rounded-xl text-xs font-mono">
-                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold shadow-xs">
+              <div className="flex flex-wrap items-center gap-2.5 p-3.5 bg-slate-50/80 border border-slate-200/60 rounded-xl text-xs font-sans">
+                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-800 font-medium shadow-xs">
                   4 Units Restocked
                 </span>
-                <span className="text-slate-400 font-bold">×</span>
-                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold shadow-xs">
+                <span className="text-slate-400 font-semibold">×</span>
+                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-800 font-medium shadow-xs">
                   {multiplier}x Safe Multiplier
                 </span>
-                <span className="text-slate-400 font-bold">→</span>
+                <span className="text-slate-400 font-semibold">→</span>
                 <span className="px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold rounded-lg shadow-xs flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Notifies {calculatedSafeBatch} {calculatedSafeBatch === 1 ? "Customer" : "Customers"} Immediately

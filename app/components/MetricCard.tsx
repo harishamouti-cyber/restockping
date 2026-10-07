@@ -19,14 +19,14 @@ export function MetricCard({
 }: MetricCardProps) {
   const badgeClasses = {
     neutral: "text-zinc-600 bg-zinc-100 border-zinc-200",
-    success: "text-emerald-700 bg-emerald-50 border-emerald-200/60 font-mono",
-    attention: "text-amber-700 bg-amber-50 border-amber-200/60 font-mono",
+    success: "text-emerald-700 bg-emerald-50 border-emerald-200/60",
+    attention: "text-amber-700 bg-amber-50 border-amber-200/60",
   }[badgeTone];
 
   return (
     <div className="p-5 bg-white border border-zinc-200/80 rounded-xl shadow-xs relative overflow-hidden group">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-mono uppercase tracking-wider font-medium text-zinc-400">
+        <span className="text-[11px] font-sans uppercase tracking-wider font-semibold text-zinc-400">
           {title}
         </span>
         <div className="flex items-center gap-2">
@@ -38,7 +38,7 @@ export function MetricCard({
           </div>
         </div>
       </div>
-      <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 tabular-nums">
+      <div className="text-3xl font-semibold tracking-tight text-zinc-950 tabular-nums font-sans">
         {value}
       </div>
       <p className="text-xs text-zinc-400 mt-2 leading-normal">

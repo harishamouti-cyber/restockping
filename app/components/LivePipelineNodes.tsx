@@ -38,7 +38,7 @@ export function LivePipelineNodes({ pendingCount = 0 }: { pendingCount: number }
     <div className="p-6 bg-white border border-slate-200/70 rounded-2xl shadow-xs space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-900">
+          <h2 className="text-[11px] font-sans uppercase tracking-wider font-semibold text-slate-900">
             How a Restock Turns into a Sale
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -59,7 +59,7 @@ export function LivePipelineNodes({ pendingCount = 0 }: { pendingCount: number }
           >
             <div>
               <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                <span className="text-[11px] font-sans text-slate-400 font-semibold tracking-wider">
                   STEP {step.num}
                 </span>
                 <span className={`text-[10px] font-medium ring-1 ring-inset px-2 py-0.5 rounded-full ${step.badgeClass}`}>
