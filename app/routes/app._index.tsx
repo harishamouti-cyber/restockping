@@ -296,7 +296,7 @@ export default function RestockOverview() {
             {/* Quick Pacing Summary Strip to Perfectly Balance Card Height */}
             <div className="pt-2.5 mt-2 border-t border-[#f1f2f4] flex items-center justify-between text-[11px] text-[#8c9196]">
               <span>Next check: <strong className="text-[#202223] font-medium">Automatic</strong></span>
-              <span>Batch window: <strong className="text-[#202223] font-medium">{settings?.dripIntervalMinutes || 120}m</strong></span>
+              <span>Batch window: <strong className="text-[#202223] font-medium">2 hours</strong></span>
             </div>
           </div>
         </div>
