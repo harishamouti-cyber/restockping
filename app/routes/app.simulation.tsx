@@ -189,7 +189,7 @@ export default function SimulationLabPage() {
             <p className="text-xs text-emerald-800">
               Formula Execution: min(round({simResult.availableUnits} units × {simResult.multiplier}),{" "}
               {simResult.targetAlerts + simResult.remainingPending} pending) = <strong>{simResult.targetAlerts} alerts</strong>.
-              Remaining in queue: <strong>{simResult.remainingPending}</strong>.
+              Remaining waiting customers: <strong>{simResult.remainingPending}</strong>.
             </p>
             {simResult.permalinksGenerated?.length > 0 && (
               <div className="pt-2 border-t border-emerald-200">
