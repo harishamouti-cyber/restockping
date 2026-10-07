@@ -193,7 +193,7 @@ export default function SubscribersPage() {
             <span className="text-[13px] font-normal text-[#616161]">
               Total customers
             </span>
-            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
+            <div className="shopify-numeral mt-1">
               {totalCount}
             </div>
             <div className="text-[11px] text-[#8c9196] mt-1 truncate">
@@ -205,7 +205,7 @@ export default function SubscribersPage() {
             <span className="text-[13px] font-normal text-[#616161]">
               Waiting to notify
             </span>
-            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
+            <div className="shopify-numeral mt-1">
               {pendingCount}
             </div>
             <div className="text-[11px] text-[#8c9196] mt-1 truncate">
@@ -217,7 +217,7 @@ export default function SubscribersPage() {
             <span className="text-[13px] font-normal text-[#616161]">
               Alerts sent
             </span>
-            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
+            <div className="shopify-numeral mt-1">
               {dispatchedCount}
             </div>
             <div className="text-[11px] text-[#8c9196] mt-1 truncate">

@@ -52,7 +52,7 @@ export function StatusBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium border ${current.bg} ${current.text} ${current.border} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-sans font-medium border ${current.bg} ${current.text} ${current.border} ${className}`}
     >
       <span
         className={`w-1.5 h-1.5 rounded-full ${current.dot} ${pulse ? "animate-pulse" : ""}`}

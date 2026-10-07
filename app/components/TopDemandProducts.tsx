@@ -60,7 +60,7 @@ export function TopDemandProducts({ products = [] }: { products: ProductDemand[]
                       <span className="font-medium text-[#202223] block truncate max-w-[180px]">{item.productTitle}</span>
                       <span className="text-[#8c9196] text-[10px]">{item.variantTitle}</span>
                     </td>
-                    <td className="py-2 text-[#202223] tabular-nums font-normal">
+                    <td className="py-2 text-[#202223] font-normal">
                       ${item.price.toFixed(2)}
                     </td>
                     <td className="py-2">
@@ -68,7 +68,7 @@ export function TopDemandProducts({ products = [] }: { products: ProductDemand[]
                         {item.subscribersCount}
                       </span>
                     </td>
-                    <td className="py-2 font-medium text-[#202223] tabular-nums">
+                    <td className="py-2 font-medium text-[#202223]">
                       ${item.totalDemand.toFixed(2)}
                     </td>
                     <td className="py-2 text-right">

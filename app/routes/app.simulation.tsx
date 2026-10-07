@@ -203,7 +203,7 @@ export default function AlertSimulator() {
             </div>
             <div className="flex justify-between border-t border-[#e1e3e5] pt-1.5 font-medium text-[#202223]">
               <span>Target notification batch size:</span>
-              <span className="text-[#008060] font-semibold font-mono">
+              <span className="text-[#008060] font-semibold">
                 {effectiveBatch}{" "}
                 {effectiveBatch === 1 ? "customer" : "customers"}
               </span>

@@ -181,7 +181,7 @@ export default function RestockOverview() {
           </div>
         )}
 
-        {/* 3 Metric Cards: 1:1 Shopify Analytics Style */}
+        {/* 3 Metric Cards: Exact Shopify Analytics Style */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Card 1: Potential Waitlist Revenue */}
           <div className="p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col justify-between min-h-[92px]">
@@ -193,10 +193,11 @@ export default function RestockOverview() {
                 {isWaitlistActive ? "Active" : "All caught up"}
               </span>
             </div>
-            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
+            {/* Clean, unslashed, normal round zero */}
+            <div className="shopify-numeral mt-1">
               ${totalPotentialRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[11px] text-[#8c9196] mt-1 truncate font-sans">
+            <div className="text-[11px] text-[#8c9196] mt-1 truncate">
               {isWaitlistActive ? "Customer intent across sold-out items" : "All requests notified and cleared"}
             </div>
           </div>
@@ -213,10 +214,11 @@ export default function RestockOverview() {
                 {isWaitlistActive ? "Ready" : "Clear"}
               </span>
             </div>
-            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
+            {/* Clean, unslashed, normal round zero */}
+            <div className="shopify-numeral mt-1">
               {metrics.pendingCount}
             </div>
-            <div className="text-[11px] text-[#8c9196] mt-1 truncate font-sans">
+            <div className="text-[11px] text-[#8c9196] mt-1 truncate">
               {isWaitlistActive ? "Shoppers awaiting restock notification" : "No shoppers currently waiting"}
             </div>
           </div>
@@ -231,10 +233,11 @@ export default function RestockOverview() {
                 {metrics.dispatchedCount > 0 ? `${metrics.dispatchedCount} sent` : "0 sent"}
               </span>
             </div>
-            <div className="text-[22px] font-semibold text-[#202223] leading-7 tracking-[-0.02em] font-sans tabular-nums mt-1">
+            {/* Clean, unslashed, normal round zero */}
+            <div className="shopify-numeral mt-1">
               {metrics.convertedCount}
             </div>
-            <div className="text-[11px] text-[#8c9196] mt-1 truncate font-sans">
+            <div className="text-[11px] text-[#8c9196] mt-1 truncate">
               Orders placed via 1-click checkout links
             </div>
           </div>

@@ -40,7 +40,7 @@ export function MetricCard({
           )}
         </div>
       </div>
-      <div className="text-[20px] font-semibold text-[#202223] leading-6 tracking-[-0.01em] tabular-nums mt-1 font-sans">
+      <div className="shopify-numeral mt-1">
         {value}
       </div>
       <div className="text-[11px] text-[#8c9196] mt-1 truncate">
