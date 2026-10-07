@@ -16,11 +16,11 @@ export function ToggleSwitch({
   disabled = false,
 }: ToggleSwitchProps) {
   return (
-    <div className="flex items-start justify-between p-4 bg-zinc-50/50 border border-zinc-200/80 rounded-xl">
-      <div>
-        <span className="text-xs font-semibold text-zinc-900 block">{label}</span>
+    <div className="flex items-start justify-between p-3.5 bg-[#f6f6f7] border border-[#e1e3e5] rounded-lg">
+      <div className="pr-4">
+        <span className="text-xs font-semibold text-[#202223] block">{label}</span>
         {description && (
-          <span className="text-xs text-zinc-500 block mt-0.5 leading-relaxed">
+          <span className="text-[11px] text-[#616161] block mt-0.5 leading-relaxed">
             {description}
           </span>
         )}
@@ -32,11 +32,11 @@ export function ToggleSwitch({
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-          checked ? "bg-emerald-600" : "bg-zinc-200"
+          checked ? "bg-[#008060]" : "bg-[#c9cccf]"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
       >
         <span
-          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-2xs ring-0 transition duration-200 ease-in-out ${
             checked ? "translate-x-4" : "translate-x-0"
           }`}
         />

@@ -129,6 +129,7 @@ export default function AppLayout() {
         </Link>
         <Link to="/app/subscribers">Subscribers</Link>
         <Link to="/app/settings">Settings</Link>
+        <Link to="/app/simulation">Alert Simulator</Link>
       </ui-nav-menu>
       <Outlet />
     </AppProvider>

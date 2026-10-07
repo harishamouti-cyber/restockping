@@ -48,11 +48,11 @@ export function SubscribersIndexTable({
   const getStatusMarkup = (status: string) => {
     switch (status) {
       case "PENDING":
-        return <Badge tone="attention">Waiting to Notify</Badge>;
+        return <Badge tone="attention">Waiting to notify</Badge>;
       case "DISPATCHED":
-        return <Badge tone="info">Alert Sent</Badge>;
+        return <Badge tone="info">Alert sent</Badge>;
       case "CONVERTED":
-        return <Badge tone="success">Order Placed</Badge>;
+        return <Badge tone="success">Order placed</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -66,14 +66,14 @@ export function SubscribersIndexTable({
       selected={selectedResources.includes(sub.id)}
     >
       <IndexTable.Cell>
-        <span className="font-mono text-xs font-medium text-zinc-900">
+        <span className="text-xs font-medium text-[#202223] font-sans">
           {sub.customerEmail || "Anonymous"}
         </span>
       </IndexTable.Cell>
       <IndexTable.Cell>
-        <div className="text-xs">
-          <div className="font-medium text-zinc-900">{sub.productTitle}</div>
-          <div className="text-zinc-500 font-mono">
+        <div className="text-xs font-sans">
+          <div className="font-medium text-[#202223]">{sub.productTitle}</div>
+          <div className="text-[#616161] text-[11px]">
             {sub.variantTitle} · ${Number(sub.priceSnapshot).toFixed(2)}
           </div>
         </div>
@@ -82,8 +82,12 @@ export function SubscribersIndexTable({
         {getStatusMarkup(sub.status)}
       </IndexTable.Cell>
       <IndexTable.Cell>
-        <span className="font-mono text-xs text-zinc-500">
-          {new Date(sub.createdAt).toLocaleDateString()}
+        <span className="text-xs text-[#616161] font-sans">
+          {new Date(sub.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}
         </span>
       </IndexTable.Cell>
       <IndexTable.Cell>
@@ -91,16 +95,16 @@ export function SubscribersIndexTable({
           {sub.status === "PENDING" && (
             <button
               onClick={() => onDispatchSingle(sub.id)}
-              className="px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200/80 transition-colors cursor-pointer"
+              className="px-2.5 py-1 text-xs font-medium text-[#008060] bg-[#e3f1df] hover:bg-[#c1e5ba] rounded-md transition-colors cursor-pointer"
             >
-              Send Alert Now
+              Send alert now
             </button>
           )}
           <button
             onClick={() => onCopyPermalink(sub)}
-            className="px-2.5 py-1 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 rounded-lg border border-zinc-200 shadow-2xs transition-colors cursor-pointer"
+            className="px-2.5 py-1 text-xs font-medium text-[#202223] bg-white hover:bg-[#f6f6f7] border border-[#d2d5d8] rounded-md shadow-[0_1px_0_rgba(0,0,0,0.05)] transition-colors cursor-pointer"
           >
-            Copy Checkout Link
+            Copy checkout link
           </button>
         </div>
       </IndexTable.Cell>
@@ -116,10 +120,10 @@ export function SubscribersIndexTable({
         onSelectionChange={handleSelectionChange}
         promotedBulkActions={promotedActions}
         headings={[
-          { title: "Customer Email" },
+          { title: "Customer" },
           { title: "Product / Variant" },
           { title: "Status" },
-          { title: "Date Signed Up" },
+          { title: "Date registered" },
           { title: "Actions", alignment: "end" },
         ]}
       >

@@ -131,8 +131,8 @@ export default function SettingsPage() {
   }, [settings]);
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <ui-title-bar title="Alert & Pacing Settings" />
+    <div className="min-h-screen bg-[#f1f2f4] pb-20 font-sans text-[#202223] antialiased">
+      <ui-title-bar title="Settings" />
 
       {isDirty && (
         <ui-save-bar id="settings-save-bar">
@@ -145,17 +145,21 @@ export default function SettingsPage() {
         </ui-save-bar>
       )}
 
-      <main className="max-w-4xl mx-auto px-6 py-6 space-y-6">
+      <main className="max-w-[1000px] mx-auto px-4 py-4 space-y-4">
+        {/* Unsaved Changes Banner */}
         {isDirty && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-xl flex items-center justify-between shadow-xs">
-            <span className="text-xs font-medium text-emerald-900">
-              You have unsaved configuration changes.
-            </span>
+          <div className="p-3 bg-[#fff5ea] border border-[#f5b854] rounded-lg flex items-center justify-between shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#b98900]" />
+              <span className="text-xs font-medium text-[#202223]">
+                You have unsaved changes
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleDiscard}
-                className="px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded-md hover:bg-[#f6f6f7] transition-colors cursor-pointer"
               >
                 Discard
               </button>
@@ -163,108 +167,139 @@ export default function SettingsPage() {
                 type="button"
                 onClick={handleSave}
                 disabled={navigation.state === "submitting"}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg shadow-xs hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50"
+                className="px-3 py-1 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
               >
-                {navigation.state === "submitting" ? "Saving..." : "Save Settings"}
+                {navigation.state === "submitting" ? "Saving..." : "Save changes"}
               </button>
             </div>
           </div>
         )}
 
-        {/* Pacing Settings Card */}
-        <div className="p-6 bg-white border border-zinc-200/80 rounded-xl shadow-xs space-y-4">
+        {/* Section 1: Smart Alert Pacing */}
+        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
           <div>
-            <h2 className="text-sm font-semibold tracking-tight text-zinc-900">
-              Smart Alert Pacing
+            <h2 className="text-sm font-semibold text-[#202223]">
+              Smart restock pacing
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Control how many notifications are sent per restocked item to prevent instant sell-outs.
+            <p className="text-xs text-[#616161] mt-0.5">
+              Control how customer notifications are dispatched when inventory is replenished to prevent instant sell-outs.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-zinc-700 block mb-1">
-                Notification Batch Size (Multiplier)
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-[#f1f2f4]">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-[#202223] block">
+                Notification batch size multiplier
               </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                value={formState.dripBatchMultiplier}
-                onChange={(e) => handleChange("dripBatchMultiplier", parseFloat(e.target.value) || 2.5)}
-                className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-mono"
-              />
-              <span className="text-[11px] text-zinc-400 mt-1 block">
-                How many alerts to send per restocked item. E.g., 2.5x means if you restock 4 units, we notify 10 customers.
-              </span>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={formState.dripBatchMultiplier}
+                  onChange={(e) => handleChange("dripBatchMultiplier", parseFloat(e.target.value) || 2.5)}
+                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+                />
+              </div>
+              <p className="text-[11px] text-[#616161] leading-relaxed">
+                Number of customers alerted per unit restocked (e.g. 2.5x with 4 units notifies 10 customers).
+              </p>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-zinc-700 block mb-1">
-                Pause Between Batches (Minutes)
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-[#202223] block">
+                Pause between batches (minutes)
               </label>
-              <input
-                type="number"
-                step="1"
-                min="5"
-                value={formState.dripIntervalMinutes}
-                onChange={(e) => handleChange("dripIntervalMinutes", parseInt(e.target.value, 10) || 120)}
-                className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-mono"
-              />
-              <span className="text-[11px] text-zinc-400 mt-1 block">
-                Minutes to wait before notifying the next group of customers if items remain in stock.
-              </span>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="1"
+                  min="5"
+                  value={formState.dripIntervalMinutes}
+                  onChange={(e) => handleChange("dripIntervalMinutes", parseInt(e.target.value, 10) || 120)}
+                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+                />
+              </div>
+              <p className="text-[11px] text-[#616161] leading-relaxed">
+                Cooldown period before notifying the next group of customers if items remain in stock.
+              </p>
             </div>
+          </div>
+
+          <div className="max-w-md space-y-1 pt-1">
+            <label className="text-xs font-medium text-[#202223] block">
+              Minimum restock threshold (units)
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="1"
+              value={formState.minRestockThreshold}
+              onChange={(e) => handleChange("minRestockThreshold", parseInt(e.target.value, 10) || 1)}
+              className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+            />
+            <p className="text-[11px] text-[#616161] leading-relaxed">
+              Minimum inventory required to trigger restock notifications.
+            </p>
           </div>
         </div>
 
-        {/* Branding & Visuals Card */}
-        <div className="p-6 bg-white border border-zinc-200/80 rounded-xl shadow-xs space-y-5">
+        {/* Section 2: Storefront & Customer Notifications */}
+        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
           <div>
-            <h2 className="text-sm font-semibold tracking-tight text-zinc-900">
-              Storefront Branding & Notification Preferences
+            <h2 className="text-sm font-semibold text-[#202223]">
+              Storefront & notification preferences
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Configure brand colors and notification channel preferences.
+            <p className="text-xs text-[#616161] mt-0.5">
+              Customize the appearance of storefront restock buttons and customer notification details.
             </p>
           </div>
 
-          <ColorPickerInput
-            label="Button & Badge Color"
-            value={formState.accentColor}
-            onChange={(color) => handleChange("accentColor", color)}
-            description='Controls the color of your "Notify Me" buttons and status badges on product pages.'
-          />
+          <div className="pt-1 border-t border-[#f1f2f4] space-y-4">
+            <ColorPickerInput
+              label="Button & badge accent color"
+              value={formState.accentColor}
+              onChange={(color) => handleChange("accentColor", color)}
+              description='Color used for the "Notify Me When Available" storefront button and badges.'
+            />
 
-          <ToggleSwitch
-            label="Allow Browser Push Notifications"
-            description="Let shoppers receive instant alerts on their mobile device or desktop browser with 1-click."
-            checked={formState.enableWebPush}
-            onChange={(checked) => handleChange("enableWebPush", checked)}
-          />
+            <ToggleSwitch
+              label="Browser web push notifications"
+              description="Allow shoppers to opt into instant notifications directly in their desktop or mobile browser."
+              checked={formState.enableWebPush}
+              onChange={(checked) => handleChange("enableWebPush", checked)}
+            />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-100">
-            <div>
-              <label className="text-xs font-medium text-zinc-700 block mb-1">Sender Name</label>
-              <input
-                type="text"
-                value={formState.senderName}
-                onChange={(e) => handleChange("senderName", e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-sans"
-              />
-              <span className="text-[11px] text-zinc-400 mt-1 block">Shown as the sender name in restock emails</span>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-[#202223] block">
+                  Sender name
+                </label>
+                <input
+                  type="text"
+                  value={formState.senderName}
+                  onChange={(e) => handleChange("senderName", e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+                />
+                <p className="text-[11px] text-[#616161]">
+                  Sender name displayed on customer restock emails.
+                </p>
+              </div>
 
-            <div>
-              <label className="text-xs font-medium text-zinc-700 block mb-1">Email Subject Line</label>
-              <input
-                type="text"
-                value={formState.emailSubjectTemplate}
-                onChange={(e) => handleChange("emailSubjectTemplate", e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all font-sans"
-              />
-              <span className="text-[11px] text-zinc-400 mt-1 block">Supports `&#123;&#123;product_title&#125;&#125;` placeholder</span>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-[#202223] block">
+                  Email subject line
+                </label>
+                <input
+                  type="text"
+                  value={formState.emailSubjectTemplate}
+                  onChange={(e) => handleChange("emailSubjectTemplate", e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
+                />
+                <p className="text-[11px] text-[#616161]">
+                  Supports the <code className="bg-[#f1f2f4] px-1 py-0.5 rounded text-[#202223] text-[10px]">{"{{product_title}}"}</code> template placeholder.
+                </p>
+              </div>
             </div>
           </div>
         </div>

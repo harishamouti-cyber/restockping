@@ -102,64 +102,70 @@ export default function SimulationLabPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-zinc-900">
-      <ui-title-bar title="Restock Alert Simulator" />
+    <div className="min-h-screen bg-[#f1f2f4] pb-16 font-sans text-[#202223] antialiased">
+      <ui-title-bar title="Alert Simulator" />
 
-      <main className="max-w-4xl mx-auto px-6 py-6 space-y-6">
-        {/* Diagnostic Simulator Container */}
-        <div className="bg-white border border-zinc-200/80 rounded-xl shadow-xs p-6 space-y-6">
+      <main className="max-w-[1000px] mx-auto px-4 py-4 space-y-4">
+        {/* Simulation Setup Card */}
+        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">
-              Smart Alert Pacing Test Run
+            <h2 className="text-sm font-semibold text-[#202223]">
+              Smart restock pacing test run
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Simulate warehouse replenishment events to verify batch multipliers, pause windows, and 1-Click checkout links without sending live alerts to customers.
+            <p className="text-xs text-[#616161] mt-0.5">
+              Simulate inventory replenishment to test batch pacing, pause intervals, and 1-Click checkout links without sending live messages to real shoppers.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-700">Restocked Available Units</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-[#f1f2f4]">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-[#202223] block">
+                Restocked units to simulate
+              </label>
               <input
                 type="number"
                 min="1"
                 value={availableUnits}
                 onChange={(e) => setAvailableUnits(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
+                className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
               />
-              <span className="text-[11px] text-zinc-400 block">
-                Simulated units delivered to warehouse
+              <span className="text-[11px] text-[#616161] block">
+                Simulated units replenished in warehouse
               </span>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-700">Inventory Item ID</label>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-[#202223] block">
+                Inventory Item ID
+              </label>
               <input
                 type="text"
                 value={inventoryItemId}
                 onChange={(e) => setInventoryItemId(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
+                className="w-full px-3 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all font-sans"
               />
-              <span className="text-[11px] text-zinc-400 block">
-                Shoppers waiting to be notified: <strong className="text-zinc-700 font-mono">{pendingCount}</strong>
+              <span className="text-[11px] text-[#616161] block">
+                Shoppers waiting to be notified: <strong className="text-[#202223] font-medium">{pendingCount}</strong>
               </span>
             </div>
           </div>
 
-          {/* High-Contrast Monospaced Diagnostic Panel */}
-          <div className="p-4 bg-zinc-900 text-zinc-100 rounded-xl font-mono text-xs space-y-2 border border-zinc-800">
-            <div className="text-zinc-400">// Notification Calculation Output</div>
-            <div className="flex justify-between">
-              <span>Replenished Units:</span>
-              <span className="text-emerald-400 font-bold">{units} units</span>
+          {/* Clean Polaris Formula Summary Box */}
+          <div className="p-3 bg-[#f6f6f7] border border-[#e1e3e5] rounded-md space-y-1.5 text-xs">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+              Pacing calculation preview
             </div>
-            <div className="flex justify-between">
-              <span>Configured Multiplier:</span>
-              <span>{multiplier}x</span>
+            <div className="flex items-center justify-between text-[#616161]">
+              <span>Replenished units:</span>
+              <span className="text-[#202223] font-medium">{units} units</span>
             </div>
-            <div className="flex justify-between border-t border-zinc-800 pt-2 font-semibold">
-              <span>Target Notification Batch Size:</span>
-              <span className="text-emerald-400">{calculatedBatchSize} customers</span>
+            <div className="flex items-center justify-between text-[#616161]">
+              <span>Configured multiplier:</span>
+              <span className="text-[#202223] font-medium">{multiplier}x</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-[#e1e3e5] pt-1.5 font-medium text-[#202223]">
+              <span>Target notification batch size:</span>
+              <span className="text-[#008060] font-semibold">{calculatedBatchSize} customers</span>
             </div>
           </div>
 
@@ -168,39 +174,51 @@ export default function SimulationLabPage() {
               type="button"
               onClick={handleRunSimulation}
               disabled={isRunning}
-              className="px-4 py-2 text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 rounded-lg transition-all shadow-xs cursor-pointer border-0"
+              className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md shadow-[0_1px_0_rgba(0,0,0,0.05)] transition-colors cursor-pointer disabled:opacity-50"
             >
-              {isRunning ? "Running Simulation..." : "Execute Test Run"}
+              {isRunning ? "Running test..." : "Run test simulation"}
             </button>
           </div>
         </div>
 
         {/* Live Simulation Results */}
         {simResult && (
-          <div className="p-5 bg-emerald-50 border border-emerald-200/80 rounded-xl space-y-3">
+          <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-900">
-                ✓ Test Run Complete: {simResult.dispatchedCount} Test Alerts Generated
-              </span>
-              <span className="text-xs font-mono text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#008060]" />
+                <span className="text-xs font-semibold text-[#202223]">
+                  Test run completed successfully
+                </span>
+              </div>
+              <span className="text-[11px] font-medium text-[#008060] bg-[#e3f1df] px-2 py-0.5 rounded">
                 Batch #{simResult.batchId}
               </span>
             </div>
-            <p className="text-xs text-emerald-800">
-              Formula Execution: min(round({simResult.availableUnits} units × {simResult.multiplier}),{" "}
-              {simResult.targetAlerts + simResult.remainingPending} pending) = <strong>{simResult.targetAlerts} alerts</strong>.
-              Remaining waiting customers: <strong>{simResult.remainingPending}</strong>.
+
+            <p className="text-xs text-[#616161] leading-relaxed">
+              Dispatched <strong>{simResult.targetAlerts} test alerts</strong> based on {simResult.availableUnits} restocked units and a {simResult.multiplier}x multiplier.
+              Remaining waiting shoppers: <strong>{simResult.remainingPending}</strong>.
             </p>
+
             {simResult.permalinksGenerated?.length > 0 && (
-              <div className="pt-2 border-t border-emerald-200">
-                <span className="text-xs font-semibold text-emerald-900 block mb-1">
-                  Generated 1-Click Permalinks:
+              <div className="pt-2 border-t border-[#f1f2f4]">
+                <span className="text-xs font-semibold text-[#202223] block mb-1.5">
+                  Generated 1-Click Checkout Permalinks:
                 </span>
-                <ul className="space-y-1 text-[11px] font-mono text-emerald-800">
+                <ul className="space-y-1.5 text-xs">
                   {simResult.permalinksGenerated.map((link: string, idx: number) => (
-                    <li key={idx} className="truncate">
-                      <a href={link} target="_blank" rel="noreferrer" className="underline hover:text-emerald-950">
+                    <li key={idx} className="flex items-center justify-between p-2 bg-[#f6f6f7] border border-[#e1e3e5] rounded-md">
+                      <span className="text-[#616161] truncate max-w-md font-mono text-[11px]">
                         {link}
+                      </span>
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2 py-0.5 text-[11px] font-medium text-[#005bd3] hover:underline shrink-0"
+                      >
+                        Open cart →
                       </a>
                     </li>
                   ))}

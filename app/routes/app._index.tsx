@@ -119,17 +119,14 @@ export default function RestockOverview() {
       <main className="max-w-[1200px] mx-auto px-4 py-4 space-y-3">
         {/* Compact Status Banner (Matches Analytics Filter Bar) */}
         <div className="bg-white border border-[#e1e3e5] rounded-lg px-3.5 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#008060] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#008060]" />
-            </span>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#008060] shrink-0" />
             <span className="text-xs font-semibold text-[#202223]">
-              Automatic restock alerts running
+              Automatic restock alerts active
             </span>
             <span className="text-[#8c9196] text-xs">·</span>
             <span className="text-xs text-[#616161]">
-              Paced 2 hours apart ({multiplier}x protection active)
+              Connected to store inventory ({multiplier}x protection active)
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -147,6 +144,33 @@ export default function RestockOverview() {
             </button>
           </div>
         </div>
+
+        {/* Actionable Theme Guidance when no subscribers exist yet */}
+        {metrics.totalRegistered === 0 && (
+          <div className="bg-[#f0f7ff] border border-[#b4dbff] rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+            <div className="flex items-center gap-2.5">
+              <div className="text-[#005bd3]">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-[#002b66] block">
+                  Add the Back in Stock button to your product page template
+                </span>
+                <span className="text-[11px] text-[#2c4e75]">
+                  Enable the RestockPing app block in the Theme Editor so customers can sign up when items sell out.
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={handleThemeDeepLink}
+              className="px-3 py-1 text-xs font-medium text-[#002b66] bg-white border border-[#b4dbff] rounded-md hover:bg-[#e0f0ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
+            >
+              Open theme editor →
+            </button>
+          </div>
+        )}
 
         {/* 3 Metric Cards: 1:1 Shopify Analytics Style */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

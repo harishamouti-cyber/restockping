@@ -14,25 +14,36 @@ export function ColorPickerInput({
   description = "Controls storefront button and badge highlights",
 }: ColorPickerInputProps) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-zinc-700 block">{label}</label>
-      <div className="flex items-center gap-2">
-        <div className="relative flex items-center">
+    <div className="space-y-1.5 font-sans">
+      <label className="text-xs font-medium text-[#202223] block">{label}</label>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
           <input
             type="color"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-8 h-8 rounded-lg border border-zinc-200 p-0.5 cursor-pointer bg-white"
+            className="w-7 h-7 rounded border border-[#c9cccf] p-0.5 cursor-pointer bg-white"
+          />
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-24 px-2.5 py-1.5 text-xs uppercase text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all"
           />
         </div>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-32 px-3 py-1.5 text-xs font-mono uppercase bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
-        />
-        <span className="text-xs text-zinc-400">{description}</span>
+
+        {/* Live Storefront Button Preview */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-[#8c9196]">Preview:</span>
+          <span
+            style={{ backgroundColor: value }}
+            className="px-2.5 py-1 text-xs font-medium text-white rounded shadow-2xs select-none"
+          >
+            Notify Me When Available
+          </span>
+        </div>
       </div>
+      <p className="text-[11px] text-[#616161] mt-0.5">{description}</p>
     </div>
   );
 }
