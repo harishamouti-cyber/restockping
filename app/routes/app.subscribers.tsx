@@ -71,11 +71,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   const settings = await db.restockSettings.findUnique({ where: { shop: session.shop } });
+
+  const resolveImageUrl = async (variantId: string, existingUrl?: string | null) => {
+    if (existingUrl && existingUrl.startsWith("http")) return existingUrl;
+    try {
+      const rawId = variantId.replace(/\D/g, "");
+      const gid = variantId.startsWith("gid://") ? variantId : `gid://shopify/ProductVariant/${rawId}`;
+      const imgRes = await admin.graphql(
+        `
+        query GetVariantImage($id: ID!) {
+          productVariant(id: $id) {
+            image { url }
+            product { featuredImage { url } }
+          }
+        }
+      `,
+        { variables: { id: gid } }
+      );
+      const imgData = await imgRes.json();
+      const v = imgData.data?.productVariant;
+      return v?.image?.url || v?.product?.featuredImage?.url || existingUrl || null;
+    } catch {
+      return existingUrl || null;
+    }
+  };
 
   if (intent === "BULK_DELETE") {
     const ids = JSON.parse(String(formData.get("ids") || "[]"));
@@ -96,15 +120,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
+      const finalImageUrl = await resolveImageUrl(subscriber.variantId, subscriber.productImageUrl);
+
       await sendRestockNotificationEmail({
         to: subscriber.customerEmail,
         shop: session.shop,
+        storeDisplayName: settings?.storeDisplayName || undefined,
         productTitle: subscriber.productTitle,
         variantTitle: subscriber.variantTitle,
         price: Number(subscriber.priceSnapshot) || 0,
         variantId: subscriber.variantId,
-        productImageUrl: subscriber.productImageUrl || undefined,
-        storeDisplayName: settings?.storeDisplayName || undefined,
+        productImageUrl: finalImageUrl || undefined,
         senderName: settings?.senderName,
         subjectTemplate: settings?.emailSubjectTemplate,
         headlineText: settings?.emailHeadline,
@@ -115,7 +141,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       await db.restockSubscription.update({
         where: { id },
-        data: { status: "DISPATCHED", dispatchedAt: new Date() },
+        data: {
+          status: "DISPATCHED",
+          dispatchedAt: new Date(),
+          ...(finalImageUrl && !subscriber.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
+        },
       });
 
       return json({ success: true, message: `Alert email delivered to ${subscriber.customerEmail}!` });
@@ -137,15 +167,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     for (const sub of subscribers) {
       if (!sub.customerEmail) continue;
       try {
+        const finalImageUrl = await resolveImageUrl(sub.variantId, sub.productImageUrl);
+
         await sendRestockNotificationEmail({
           to: sub.customerEmail,
           shop: session.shop,
+          storeDisplayName: settings?.storeDisplayName || undefined,
           productTitle: sub.productTitle,
           variantTitle: sub.variantTitle,
           price: Number(sub.priceSnapshot) || 0,
           variantId: sub.variantId,
-          productImageUrl: sub.productImageUrl || undefined,
-          storeDisplayName: settings?.storeDisplayName || undefined,
+          productImageUrl: finalImageUrl || undefined,
           senderName: settings?.senderName,
           subjectTemplate: settings?.emailSubjectTemplate,
           headlineText: settings?.emailHeadline,
@@ -156,7 +188,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         await db.restockSubscription.update({
           where: { id: sub.id },
-          data: { status: "DISPATCHED", dispatchedAt: new Date() },
+          data: {
+            status: "DISPATCHED",
+            dispatchedAt: new Date(),
+            ...(finalImageUrl && !sub.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
+          },
         });
 
         deliveredCount++;

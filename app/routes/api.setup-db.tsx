@@ -66,6 +66,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_variantId_status_idx" ON "RestockSubscription"("shop", "variantId", "status")`,
       `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_inventoryItemId_status_idx" ON "RestockSubscription"("shop", "inventoryItemId", "status")`,
       `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_customerEmail_idx" ON "RestockSubscription"("shop", "customerEmail")`,
+      `ALTER TABLE "RestockSubscription" ADD COLUMN IF NOT EXISTS "productImageUrl" TEXT`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storeDisplayName" TEXT DEFAULT ''`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailHeadline" TEXT NOT NULL DEFAULT 'Your item is back in stock'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailBodyText" TEXT NOT NULL DEFAULT 'Good news! An item you requested is available again. Complete your order now before inventory runs out.'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailButtonText" TEXT NOT NULL DEFAULT 'Claim in 1-Click Checkout →'`,
     ];
 
     for (const sql of statements) {

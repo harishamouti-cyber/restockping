@@ -29,7 +29,7 @@ const DEFAULT_SMTP_PORT = 465;
 const DEFAULT_SMTP_USER = "harishamouti@gmail.com";
 const DEFAULT_SMTP_PASS = "rzxrokwomyiycgwo";
 const DEFAULT_SMTP_FROM_NAME = "Restock Alerts";
-const DEFAULT_PRODUCT_IMAGE = "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png";
+const DEFAULT_FALLBACK_IMAGE = "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png";
 
 export function getSmtpConfig() {
   const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
@@ -100,17 +100,18 @@ export function generateRestockEmailHtml(params: {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="margin:0;padding:0;background-color:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <body style="margin:0;padding:0;background-color:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
         <!-- Hidden Preheader for Gmail inbox snippet optimization -->
         <div style="display:none;font-size:1px;color:#f6f6f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-          ${headline} - Restocked at ${displayBrand}. Claim yours before inventory runs out.
+          ${headline} - Restocked at ${displayBrand}. Complete your purchase before inventory sells out.
         </div>
 
         <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding:40px 15px;background-color:#f6f6f7;">
           <tr>
             <td align="center">
               <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:540px;background-color:#ffffff;border:1px solid #e1e3e5;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-                <!-- Header -->
+                
+                <!-- Notice Badge & Headline -->
                 <tr>
                   <td style="padding:32px 32px 16px 32px;">
                     <div style="display:inline-block;padding:3px 8px;background-color:#e3f1df;border-radius:4px;font-size:11px;font-weight:600;color:#008060;text-transform:uppercase;letter-spacing:0.04em;">
@@ -125,18 +126,31 @@ export function generateRestockEmailHtml(params: {
                   </td>
                 </tr>
 
-                <!-- Product Box with Image -->
+                <!-- High-Converting Product Card with Real Image -->
                 <tr>
                   <td style="padding:0 32px;">
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px;">
                       <tr>
-                        <td width="72" valign="middle">
-                          <img src="${productImageUrl}" alt="${productTitle}" width="64" height="64" style="border-radius:6px;object-fit:cover;display:block;border:1px solid #e1e3e5;" />
+                        <!-- Product Thumbnail -->
+                        <td width="90" valign="middle">
+                          <img 
+                            src="${productImageUrl}" 
+                            alt="${productTitle}" 
+                            width="90" 
+                            height="90" 
+                            style="border-radius:8px;object-fit:cover;display:block;border:1px solid #e5e7eb;background-color:#ffffff;" 
+                          />
                         </td>
-                        <td style="padding-left:14px;" valign="middle">
-                          <div style="font-size:14px;font-weight:600;color:#111827;">${productTitle}</div>
-                          <div style="font-size:12px;color:#6b7280;margin-top:2px;">
-                            ${variantTitle !== "Default Title" ? variantTitle : "Standard Edition"} · <strong style="color:#111827;">$${price.toFixed(2)}</strong>
+                        <!-- Details -->
+                        <td style="padding-left:16px;" valign="middle">
+                          <div style="font-size:15px;font-weight:600;color:#111827;line-height:1.3;">
+                            ${productTitle}
+                          </div>
+                          <div style="display:inline-block;margin-top:4px;padding:2px 6px;background-color:#f3f4f6;border-radius:4px;font-size:11px;color:#4b5563;font-weight:500;">
+                            ${variantTitle !== "Default Title" ? variantTitle : "Standard Edition"}
+                          </div>
+                          <div style="font-size:16px;font-weight:700;color:#111827;margin-top:6px;">
+                            $${price.toFixed(2)}
                           </div>
                         </td>
                       </tr>
@@ -144,10 +158,10 @@ export function generateRestockEmailHtml(params: {
                   </td>
                 </tr>
 
-                <!-- CTA Button -->
+                <!-- 1-Click Checkout CTA -->
                 <tr>
                   <td style="padding:24px 32px 28px 32px;">
-                    <a href="${checkoutUrl}" target="_blank" style="display:block;width:100%;box-sizing:border-box;text-align:center;background-color:${buttonColor};color:#ffffff;padding:14px 20px;border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;">
+                    <a href="${checkoutUrl}" target="_blank" style="display:block;width:100%;box-sizing:border-box;text-align:center;background-color:${buttonColor};color:#ffffff;padding:14px 20px;border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                       ${buttonText}
                     </a>
                     <p style="margin:12px 0 0 0;font-size:11px;color:#8c9196;text-align:center;">
@@ -156,14 +170,15 @@ export function generateRestockEmailHtml(params: {
                   </td>
                 </tr>
 
-                <!-- Footer (Clean Shop Brand) -->
+                <!-- Store Footer -->
                 <tr>
-                  <td style="padding:14px 32px;background-color:#fafbfb;border-top:1px solid #f1f2f4;text-align:center;">
+                  <td style="padding:16px 32px;background-color:#fafbfb;border-top:1px solid #f1f2f4;text-align:center;">
                     <span style="font-size:11px;color:#8c9196;">
-                      Delivered automatically on behalf of <strong>${displayBrand}</strong> via RestockPing
+                      Delivered automatically on behalf of <strong style="color:#4b5563;">${displayBrand}</strong> via RestockPing
                     </span>
                   </td>
                 </tr>
+
               </table>
             </td>
           </tr>
@@ -185,23 +200,28 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     variantTitle,
     price,
     variantId,
-    productImageUrl = DEFAULT_PRODUCT_IMAGE,
+    productImageUrl,
     senderName = fromName,
     replyTo,
-    headline = params.headlineText || "Your item is back in stock",
-    bodyText = "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-    buttonText = "Claim in 1-Click Checkout →",
-    buttonColor = params.accentColor || "#805100",
-    subjectTemplate = "Back in Stock: {{product_title}} is ready to ship",
+    headline = params.headlineText || params.headline || "Your item is back in stock",
+    bodyText = params.bodyText || "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+    buttonText = params.buttonText || "Claim in 1-Click Checkout →",
+    buttonColor = params.buttonColor || params.accentColor || "#805100",
+    subjectTemplate = params.subjectTemplate || "Back in Stock: {{product_title}} is ready to ship",
     discountCode,
   } = params;
 
   const mailClient = getTransporter();
 
   // Strip accidental markdown brackets [url](url) if present
-  const cleanImageUrl = (productImageUrl || DEFAULT_PRODUCT_IMAGE)
+  let cleanImageUrl = (productImageUrl || "")
     .replace(/^\[.*?\]\((.*?)\)$/, "$1")
     .trim();
+
+  const finalImage =
+    cleanImageUrl && cleanImageUrl.startsWith("http")
+      ? cleanImageUrl
+      : DEFAULT_FALLBACK_IMAGE;
 
   const cleanVariantId = String(variantId).replace(/\D/g, "");
   const discountParam = discountCode ? `&discount=${encodeURIComponent(discountCode)}` : "";
@@ -222,7 +242,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     bodyText,
     buttonText,
     buttonColor,
-    productImageUrl: cleanImageUrl,
+    productImageUrl: finalImage,
     displayBrand,
     subject,
   });

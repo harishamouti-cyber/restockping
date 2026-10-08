@@ -6,7 +6,7 @@ import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
   const defaultBrand = shop.replace(".myshopify.com", "");
@@ -27,9 +27,58 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     emailButtonText: settingsRecord?.emailButtonText ?? "Claim in 1-Click Checkout →",
   };
 
+  // Fetch real product with a live Shopify CDN image from the store catalog
+  let sampleProduct = {
+    title: "The Out of Stock Snowboard",
+    variantTitle: "Standard Edition",
+    price: 885.95,
+    variantId: "gid://shopify/ProductVariant/123456789",
+    imageUrl: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png",
+  };
+
+  try {
+    const response = await admin.graphql(`
+      query GetSampleProduct {
+        products(first: 1) {
+          nodes {
+            title
+            featuredImage {
+              url
+            }
+            variants(first: 1) {
+              nodes {
+                id
+                title
+                price
+                image {
+                  url
+                }
+              }
+            }
+          }
+        }
+      }
+    `);
+    const data = await response.json();
+    const node = data.data?.products?.nodes?.[0];
+    if (node) {
+      const variantNode = node.variants?.nodes?.[0];
+      sampleProduct = {
+        title: node.title,
+        variantTitle: variantNode?.title || "Standard Edition",
+        price: parseFloat(variantNode?.price || "885.95"),
+        variantId: variantNode?.id || "gid://shopify/ProductVariant/123456789",
+        imageUrl: variantNode?.image?.url || node.featuredImage?.url || sampleProduct.imageUrl,
+      };
+    }
+  } catch (err) {
+    console.warn("[Settings] Catalog sample query error:", err);
+  }
+
   return json({
     settings,
     shop,
+    sampleProduct,
     defaultRecipient: "harishamouti@gmail.com",
   });
 };
@@ -50,11 +99,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         to: targetEmail,
         shop: session.shop,
         storeDisplayName: String(formData.get("storeDisplayName") || ""),
-        productTitle: "The Out of Stock Snowboard",
-        variantTitle: "Standard Edition",
-        price: 885.95,
-        variantId: "gid://shopify/ProductVariant/123456789",
-        productImageUrl: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png",
+        productTitle: String(formData.get("productTitle") || "The Out of Stock Snowboard"),
+        variantTitle: String(formData.get("variantTitle") || "Standard Edition"),
+        price: parseFloat(String(formData.get("price")) || "0"),
+        variantId: String(formData.get("variantId") || "gid://shopify/ProductVariant/123456789"),
+        productImageUrl: String(formData.get("productImageUrl") || ""),
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
@@ -62,7 +111,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         buttonColor: String(formData.get("accentColor") || "#805100"),
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
       });
-      return json({ success: true, message: `Test email successfully delivered to ${targetEmail}!` });
+      return json({ success: true, message: `Test email sent to ${targetEmail} with live product photography!` });
     } catch (err: any) {
       console.error("[Test Send Error]:", err);
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
@@ -114,7 +163,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Settings() {
-  const { settings, shop, defaultRecipient } = useLoaderData<typeof loader>();
+  const { settings, shop, sampleProduct, defaultRecipient } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -197,6 +246,12 @@ export default function Settings() {
     fd.append("emailBodyText", formState.emailBodyText);
     fd.append("emailButtonText", formState.emailButtonText);
     fd.append("accentColor", formState.accentColor);
+    // Real catalog product parameters
+    fd.append("productTitle", sampleProduct.title);
+    fd.append("variantTitle", sampleProduct.variantTitle);
+    fd.append("price", sampleProduct.price.toString());
+    fd.append("variantId", sampleProduct.variantId);
+    fd.append("productImageUrl", sampleProduct.imageUrl);
     submit(fd, { method: "POST" });
   };
 
@@ -261,7 +316,7 @@ export default function Settings() {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#008060]" />
             <span className="text-xs font-semibold text-[#202223]">Delivery Verification:</span>
-            <span className="text-xs text-[#616161]">Send a real email to verify 1-Click checkout links in your inbox</span>
+            <span className="text-xs text-[#616161]">Send a real email with live catalog photography to your inbox</span>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -456,7 +511,7 @@ export default function Settings() {
               <div className="w-full flex items-center justify-between mb-3">
                 <div>
                   <span className="text-xs font-semibold text-[#202223] block">Live Customer Email Preview</span>
-                  <span className="text-[11px] text-[#8c9196]">Real-time rendering of subscriber notifications</span>
+                  <span className="text-[11px] text-[#8c9196]">Rendering live catalog product & photograph</span>
                 </div>
                 {/* Segmented Device Switcher */}
                 <div className="inline-flex rounded-lg bg-[#f1f2f4] p-0.5 border border-[#e1e3e5]">
@@ -505,19 +560,22 @@ export default function Settings() {
                       "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
                   </p>
 
-                  {/* Clean Product Row with True Thumbnail */}
-                  <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
+                  {/* Real Product Card with True CDN Image */}
+                  <div className="flex items-center gap-3 p-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
                     <img
-                      src="https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png"
-                      alt="The Out of Stock Snowboard"
-                      className="w-12 h-12 rounded object-cover border border-[#e1e3e5] shrink-0"
+                      src={sampleProduct.imageUrl}
+                      alt={sampleProduct.title}
+                      className="w-16 h-16 rounded-lg object-cover border border-[#e5e7eb] bg-white shrink-0"
                     />
                     <div className="min-w-0 flex-1">
                       <span className="text-xs font-semibold text-[#111827] block truncate">
-                        The Out of Stock Snowboard
+                        {sampleProduct.title}
                       </span>
-                      <span className="text-[11px] text-[#6b7280] block mt-0.5">
-                        Standard Edition · <strong className="text-[#111827]">$885.95</strong>
+                      <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-slate-100 rounded text-[10px] text-[#4b5563] font-medium">
+                        {sampleProduct.variantTitle}
+                      </span>
+                      <span className="text-xs font-bold text-[#111827] block mt-1">
+                        ${sampleProduct.price.toFixed(2)}
                       </span>
                     </div>
                   </div>
