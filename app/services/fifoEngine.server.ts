@@ -113,6 +113,9 @@ export async function processInventoryRestock({
     accentColor: "#008060",
     senderName: "RestockPing Alerts",
     emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+    emailHeadline: "Your item is back in stock",
+    emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+    emailButtonText: "Claim in 1-Click Checkout →",
   };
 
   if (newAvailableQuantity < settings.minRestockThreshold) {
@@ -166,8 +169,12 @@ export async function processInventoryRestock({
         variantTitle: sub.variantTitle,
         price: Number(sub.priceSnapshot) || 0,
         variantId: sub.variantId,
+        productImageUrl: sub.productImageUrl || undefined,
         senderName: settings.senderName,
         subjectTemplate: settings.emailSubjectTemplate,
+        headlineText: settings.emailHeadline,
+        bodyText: settings.emailBodyText,
+        buttonText: settings.emailButtonText,
         accentColor: settings.accentColor,
       });
 

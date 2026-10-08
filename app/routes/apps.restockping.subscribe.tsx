@@ -84,6 +84,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const productTitle = String(formData.get("productTitle") || "Product").trim();
   const variantTitle = String(formData.get("variantTitle") || "Default Variant").trim();
   const price = parseFloat(String(formData.get("price") || "0.0")) || 0.0;
+  const productImageUrl = String(formData.get("productImageUrl") || "").trim();
 
   if (!shop || !email || !variantId) {
     return json(
@@ -153,6 +154,7 @@ export async function action({ request }: ActionFunctionArgs) {
       productTitle,
       variantTitle,
       priceSnapshot: price,
+      productImageUrl: productImageUrl || null,
       channel: "EMAIL",
       status: "PENDING",
     },

@@ -30,6 +30,9 @@ model RestockSettings {
   enableWebPush         Boolean  @default(false)
   incentiveDiscountCode String?
   emailSubjectTemplate  String   @default("Back in Stock: {{product_title}} is ready to ship")
+  emailHeadline         String   @default("Your item is back in stock")
+  emailBodyText         String   @default("Good news! An item you requested is available again. Complete your order now before inventory runs out.")
+  emailButtonText       String   @default("Claim in 1-Click Checkout →")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
@@ -55,6 +58,7 @@ model RestockSubscription {
   variantTitle    String
   priceSnapshot   Float     @default(0.0)
   customerEmail   String?
+  productImageUrl String?
   pushEndpoint    String?
   pushP256dh      String?
   pushAuth        String?

@@ -103,8 +103,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         variantTitle: subscriber.variantTitle,
         price: Number(subscriber.priceSnapshot) || 0,
         variantId: subscriber.variantId,
+        productImageUrl: subscriber.productImageUrl || undefined,
         senderName: settings?.senderName,
         subjectTemplate: settings?.emailSubjectTemplate,
+        headlineText: settings?.emailHeadline,
+        bodyText: settings?.emailBodyText,
+        buttonText: settings?.emailButtonText,
         accentColor: settings?.accentColor,
       });
 
@@ -139,7 +143,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           variantTitle: sub.variantTitle,
           price: Number(sub.priceSnapshot) || 0,
           variantId: sub.variantId,
+          productImageUrl: sub.productImageUrl || undefined,
           senderName: settings?.senderName,
+          subjectTemplate: settings?.emailSubjectTemplate,
+          headlineText: settings?.emailHeadline,
+          bodyText: settings?.emailBodyText,
+          buttonText: settings?.emailButtonText,
           accentColor: settings?.accentColor,
         });
 

@@ -45,9 +45,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "enableWebPush" BOOLEAN NOT NULL DEFAULT false,
         "incentiveDiscountCode" TEXT,
         "emailSubjectTemplate" TEXT NOT NULL DEFAULT 'Back in Stock: {{product_title}} is ready to ship',
+        "emailHeadline" TEXT NOT NULL DEFAULT 'Your item is back in stock',
+        "emailBodyText" TEXT NOT NULL DEFAULT 'Good news! An item you requested is available again. Complete your order now before inventory runs out.',
+        "emailButtonText" TEXT NOT NULL DEFAULT 'Claim in 1-Click Checkout →',
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailHeadline" TEXT NOT NULL DEFAULT 'Your item is back in stock'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailBodyText" TEXT NOT NULL DEFAULT 'Good news! An item you requested is available again. Complete your order now before inventory runs out.'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailButtonText" TEXT NOT NULL DEFAULT 'Claim in 1-Click Checkout →'`,
       `CREATE TABLE IF NOT EXISTS "InventoryItemMapping" (
         "inventoryItemId" TEXT PRIMARY KEY,
         "shop" TEXT NOT NULL,
@@ -66,6 +72,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "variantTitle" TEXT NOT NULL,
         "priceSnapshot" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
         "customerEmail" TEXT,
+        "productImageUrl" TEXT,
         "pushEndpoint" TEXT,
         "pushP256dh" TEXT,
         "pushAuth" TEXT,
@@ -76,6 +83,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "dispatchedAt" TIMESTAMP(3),
         "convertedAt" TIMESTAMP(3)
       )`,
+      `ALTER TABLE "RestockSubscription" ADD COLUMN IF NOT EXISTS "productImageUrl" TEXT`,
     ];
     for (const sql of healStatements) {
       await db.$executeRawUnsafe(sql);
@@ -90,6 +98,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
           dripIntervalMinutes: 120,
           minRestockThreshold: 1,
           emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+          emailHeadline: "Your item is back in stock",
+          emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+          emailButtonText: "Claim in 1-Click Checkout →",
         },
       });
     } catch (healErr) {

@@ -9,6 +9,7 @@
   data-restockping-root
   data-product-id="{{ product.id }}"
   data-product-title="{{ product.title | escape }}"
+  data-product-image="{{ product.featured_image | image_url: width: 300 }}"
   data-selected-variant-id="{{ product.selected_or_first_available_variant.id }}"
   data-selected-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
   data-selected-variant-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
