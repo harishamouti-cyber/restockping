@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 export interface SendEmailParams {
   to: string;
   shop: string;
+  storeDisplayName?: string;
   shopName?: string;
   productTitle: string;
   variantTitle: string;
@@ -74,7 +75,8 @@ export function generateRestockEmailHtml(params: {
   buttonText: string;
   buttonColor: string;
   productImageUrl: string;
-  shopName: string;
+  displayBrand: string;
+  subject: string;
 }) {
   const {
     productTitle,
@@ -86,7 +88,8 @@ export function generateRestockEmailHtml(params: {
     buttonText,
     buttonColor,
     productImageUrl,
-    shopName,
+    displayBrand,
+    subject,
   } = params;
 
   return `
@@ -95,11 +98,12 @@ export function generateRestockEmailHtml(params: {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
       </head>
       <body style="margin:0;padding:0;background-color:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
         <!-- Hidden Preheader for Gmail inbox snippet optimization -->
-        <div style="display:none;font-size:1px;color:#f6f6f7;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">
-          ${headline} - Limited inventory restocked. Claim yours before it sells out again.
+        <div style="display:none;font-size:1px;color:#f6f6f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+          ${headline} - Restocked at ${displayBrand}. Claim yours before inventory runs out.
         </div>
 
         <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding:40px 15px;background-color:#f6f6f7;">
@@ -156,7 +160,7 @@ export function generateRestockEmailHtml(params: {
                 <tr>
                   <td style="padding:14px 32px;background-color:#fafbfb;border-top:1px solid #f1f2f4;text-align:center;">
                     <span style="font-size:11px;color:#8c9196;">
-                      Delivered automatically on behalf of <strong>${shopName}</strong> via RestockPing
+                      Delivered automatically on behalf of <strong>${displayBrand}</strong> via RestockPing
                     </span>
                   </td>
                 </tr>
@@ -175,6 +179,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
   const {
     to,
     shop,
+    storeDisplayName,
     shopName = shop.replace(".myshopify.com", ""),
     productTitle,
     variantTitle,
@@ -186,7 +191,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     headline = params.headlineText || "Your item is back in stock",
     bodyText = "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
     buttonText = "Claim in 1-Click Checkout →",
-    buttonColor = params.accentColor || "#008060",
+    buttonColor = params.accentColor || "#805100",
     subjectTemplate = "Back in Stock: {{product_title}} is ready to ship",
     discountCode,
   } = params;
@@ -201,11 +206,12 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
   const cleanVariantId = String(variantId).replace(/\D/g, "");
   const discountParam = discountCode ? `&discount=${encodeURIComponent(discountCode)}` : "";
   const checkoutUrl = `https://${shop}/cart/${cleanVariantId}:1?checkout[email]=${encodeURIComponent(to)}${discountParam}`;
+  const displayBrand = storeDisplayName?.trim() || shopName || shop.replace(".myshopify.com", "");
 
   const subject = subjectTemplate
     .replace(/\{\{\s*product_title\s*\}\}/g, productTitle)
-    .replace(/\{\{\s*product_price\s*\}\}/g, `$${price.toFixed(2)}`)
-    .replace(/\{\{\s*(?:shop_name|store_name)\s*\}\}/g, shopName);
+    .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${price.toFixed(2)}`)
+    .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
   const html = generateRestockEmailHtml({
     productTitle,
@@ -217,7 +223,8 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     buttonText,
     buttonColor,
     productImageUrl: cleanImageUrl,
-    shopName,
+    displayBrand,
+    subject,
   });
 
   const info = await mailClient.sendMail({

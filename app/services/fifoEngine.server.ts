@@ -170,6 +170,7 @@ export async function processInventoryRestock({
         price: Number(sub.priceSnapshot) || 0,
         variantId: sub.variantId,
         productImageUrl: sub.productImageUrl || undefined,
+        storeDisplayName: (settings as any).storeDisplayName || undefined,
         senderName: settings.senderName,
         subjectTemplate: settings.emailSubjectTemplate,
         headlineText: settings.emailHeadline,

@@ -20,6 +20,7 @@ model Session {
 
 model RestockSettings {
   shop                  String   @id
+  storeDisplayName      String?  @default("")
   senderName            String   @default("Fulfillment Center")
   senderEmail           String?
   replyToEmail          String?
