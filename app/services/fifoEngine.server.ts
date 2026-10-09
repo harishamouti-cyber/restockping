@@ -177,6 +177,7 @@ export async function processInventoryRestock({
         bodyText: settings.emailBodyText,
         buttonText: settings.emailButtonText,
         accentColor: settings.accentColor,
+        subscriptionId: sub.id,
       });
 
       await db.restockSubscription.update({

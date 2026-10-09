@@ -4,6 +4,7 @@ import { useLoaderData, useSubmit, useSearchParams, useNavigate, useActionData }
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
+import { getVariantProductMedia } from "../services/catalog.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
 
@@ -80,23 +81,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const resolveImageUrl = async (variantId: string, existingUrl?: string | null) => {
     if (existingUrl && existingUrl.startsWith("http")) return existingUrl;
     try {
-      const rawId = variantId.replace(/\D/g, "");
-      const gid = variantId.startsWith("gid://") ? variantId : `gid://shopify/ProductVariant/${rawId}`;
-      const imgRes = await admin.graphql(
-        `
-        query GetVariantImage($id: ID!) {
-          productVariant(id: $id) {
-            image { url }
-            product { featuredImage { url } }
-          }
-        }
-      `,
-        { variables: { id: gid } }
-      );
-      const imgData = await imgRes.json();
-      const v = imgData.data?.productVariant;
-      return v?.image?.url || v?.product?.featuredImage?.url || existingUrl || null;
-    } catch {
+      const media = await getVariantProductMedia(admin, variantId);
+      return media.imageUrl || existingUrl || null;
+    } catch (err) {
+      console.error("[Catalog Media Fetch Error]:", err);
       return existingUrl || null;
     }
   };
@@ -120,7 +108,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      const finalImageUrl = await resolveImageUrl(subscriber.variantId, subscriber.productImageUrl);
+      let imageUrl = subscriber.productImageUrl;
+      if (!imageUrl) {
+        try {
+          const media = await getVariantProductMedia(admin, subscriber.variantId);
+          imageUrl = media.imageUrl || null;
+        } catch (err) {
+          console.error("[Catalog Media Fetch Error]:", err);
+        }
+      }
 
       await sendRestockNotificationEmail({
         to: subscriber.customerEmail,
@@ -130,13 +126,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         variantTitle: subscriber.variantTitle,
         price: Number(subscriber.priceSnapshot) || 0,
         variantId: subscriber.variantId,
-        productImageUrl: finalImageUrl || undefined,
+        productImageUrl: imageUrl || undefined,
         senderName: settings?.senderName,
         subjectTemplate: settings?.emailSubjectTemplate,
         headlineText: settings?.emailHeadline,
         bodyText: settings?.emailBodyText,
         buttonText: settings?.emailButtonText,
         accentColor: settings?.accentColor,
+        subscriptionId: subscriber.id,
       });
 
       await db.restockSubscription.update({
@@ -144,7 +141,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data: {
           status: "DISPATCHED",
           dispatchedAt: new Date(),
-          ...(finalImageUrl && !subscriber.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
+          ...(imageUrl && !subscriber.productImageUrl ? { productImageUrl: imageUrl } : {}),
         },
       });
 
@@ -167,7 +164,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     for (const sub of subscribers) {
       if (!sub.customerEmail) continue;
       try {
-        const finalImageUrl = await resolveImageUrl(sub.variantId, sub.productImageUrl);
+        let imageUrl = sub.productImageUrl;
+        if (!imageUrl) {
+          try {
+            const media = await getVariantProductMedia(admin, sub.variantId);
+            imageUrl = media.imageUrl || null;
+          } catch (err) {
+            console.error("[Catalog Media Fetch Error]:", err);
+          }
+        }
 
         await sendRestockNotificationEmail({
           to: sub.customerEmail,
@@ -177,13 +182,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           variantTitle: sub.variantTitle,
           price: Number(sub.priceSnapshot) || 0,
           variantId: sub.variantId,
-          productImageUrl: finalImageUrl || undefined,
+          productImageUrl: imageUrl || undefined,
           senderName: settings?.senderName,
           subjectTemplate: settings?.emailSubjectTemplate,
           headlineText: settings?.emailHeadline,
           bodyText: settings?.emailBodyText,
           buttonText: settings?.emailButtonText,
           accentColor: settings?.accentColor,
+          subscriptionId: sub.id,
         });
 
         await db.restockSubscription.update({
@@ -191,7 +197,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           data: {
             status: "DISPATCHED",
             dispatchedAt: new Date(),
-            ...(finalImageUrl && !sub.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
+            ...(imageUrl && !sub.productImageUrl ? { productImageUrl: imageUrl } : {}),
           },
         });
 

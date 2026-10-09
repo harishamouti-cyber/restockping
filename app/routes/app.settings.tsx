@@ -4,87 +4,51 @@ import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
+import { getFirstOutOfStockProduct } from "../services/catalog.server";
 import { sanitizeShopBrandName } from "../utils/brand";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const sanitizedDefault = sanitizeShopBrandName(shop);
-  const settingsRecord = await db.restockSettings.findUnique({ where: { shop } });
+  const [settingsRecord, sampleProduct] = await Promise.all([
+    db.restockSettings.findUnique({ where: { shop } }),
+    getFirstOutOfStockProduct(admin),
+  ]);
 
-  const settings = {
-    storeDisplayName: settingsRecord?.storeDisplayName || sanitizedDefault,
-    dripBatchMultiplier: settingsRecord?.dripBatchMultiplier ?? 2.5,
-    dripIntervalMinutes: settingsRecord?.dripIntervalMinutes ?? 120,
-    minRestockThreshold: settingsRecord?.minRestockThreshold ?? 1,
-    accentColor: settingsRecord?.accentColor ?? "#008060",
-    senderName: settingsRecord?.senderName ?? "Fulfillment Center",
-    emailSubjectTemplate: settingsRecord?.emailSubjectTemplate ?? "Back in Stock: {{product_title}} is ready to ship",
-    emailHeadline: settingsRecord?.emailHeadline ?? "Your item is back in stock",
-    emailBodyText: settingsRecord?.emailBodyText ?? "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-    emailButtonText: settingsRecord?.emailButtonText ?? "Claim in 1-Click Checkout →",
-    storefrontButtonText: settingsRecord?.storefrontButtonText ?? "Notify Me When Available",
-    storefrontSuccessMessage: settingsRecord?.storefrontSuccessMessage ?? "You're on the waitlist! We'll email you the moment stock returns.",
-    storefrontButtonRadius: settingsRecord?.storefrontButtonRadius ?? 6,
+  const sanitizedDefault = sanitizeShopBrandName(shop);
+  const activeSettings = settingsRecord || {
+    storeDisplayName: sanitizedDefault,
+    dripBatchMultiplier: 2.5,
+    dripIntervalMinutes: 120,
+    minRestockThreshold: 1,
+    accentColor: "#008060",
+    senderName: "Fulfillment Center",
+    emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+    emailHeadline: "Your item is back in stock",
+    emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+    emailButtonText: "Claim in 1-Click Checkout →",
+    storefrontButtonText: "Notify Me When Available",
+    storefrontSuccessMessage: "You're on the waitlist! We'll email you the moment stock returns.",
+    storefrontButtonRadius: 6,
   };
 
-  // Default sample product with high-resolution photograph
-  let sampleProduct = {
-    title: "The Out of Stock Snowboard",
+  const previewItem = sampleProduct || {
+    productId: "sample_p1",
+    variantId: "gid://shopify/ProductVariant/123456789",
+    productTitle: "The Out of Stock Snowboard",
     variantTitle: "Standard Edition",
     price: 885.95,
-    variantId: "gid://shopify/ProductVariant/123456789",
-    imageUrl: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?auto=format&fit=crop&w=400&q=80",
+    imageUrl: "",
   };
-
-  try {
-    const response = await admin.graphql(`
-      query GetSampleProduct {
-        products(first: 1) {
-          nodes {
-            title
-            featuredImage {
-              url
-            }
-            variants(first: 1) {
-              nodes {
-                id
-                title
-                price
-                image {
-                  url
-                }
-              }
-            }
-          }
-        }
-      }
-    `);
-    const data = await response.json();
-    const node = data.data?.products?.nodes?.[0];
-    if (node) {
-      const variantNode = node.variants?.nodes?.[0];
-      const liveImg = variantNode?.image?.url || node.featuredImage?.url;
-      sampleProduct = {
-        title: node.title,
-        variantTitle: variantNode?.title || "Standard Edition",
-        price: parseFloat(variantNode?.price || "885.95"),
-        variantId: variantNode?.id || "gid://shopify/ProductVariant/123456789",
-        imageUrl: liveImg && liveImg.startsWith("http") ? liveImg : sampleProduct.imageUrl,
-      };
-    }
-  } catch (err) {
-    console.warn("[Settings] Catalog sample query error:", err);
-  }
 
   return json({
     settings: {
-      ...settings,
-      storeDisplayName: settings.storeDisplayName || sanitizedDefault,
+      ...activeSettings,
+      storeDisplayName: activeSettings.storeDisplayName || sanitizedDefault,
     },
     shop,
-    sampleProduct,
+    previewItem,
     defaultRecipient: "harishamouti@gmail.com",
   });
 };
@@ -105,11 +69,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         to: targetEmail,
         shop: session.shop,
         storeDisplayName: String(formData.get("storeDisplayName") || ""),
-        productTitle: String(formData.get("productTitle") || "The Out of Stock Snowboard"),
-        variantTitle: String(formData.get("variantTitle") || "Standard Edition"),
-        price: parseFloat(String(formData.get("price")) || "885.95"),
-        variantId: String(formData.get("variantId") || "gid://shopify/ProductVariant/123456789"),
-        productImageUrl: String(formData.get("productImageUrl") || "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?auto=format&fit=crop&w=400&q=80"),
+        productTitle: String(formData.get("previewProductTitle") || "The Out of Stock Snowboard"),
+        variantTitle: String(formData.get("previewVariantTitle") || "Standard Edition"),
+        price: parseFloat(String(formData.get("previewPrice")) || "885.95"),
+        variantId: String(formData.get("previewVariantId") || "gid://shopify/ProductVariant/123456789"),
+        productImageUrl: String(formData.get("previewImageUrl") || ""),
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
@@ -117,7 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         buttonColor: String(formData.get("accentColor") || "#008060"),
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
       });
-      return json({ success: true, message: `Test email successfully delivered to ${targetEmail}!` });
+      return json({ success: true, message: `Test email with real store photography delivered to ${targetEmail}!` });
     } catch (err: any) {
       console.error("[Test Send Error]:", err);
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
@@ -178,7 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Settings() {
-  const { settings, shop, sampleProduct, defaultRecipient } = useLoaderData<typeof loader>();
+  const { settings, shop, previewItem, defaultRecipient } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -261,12 +225,12 @@ export default function Settings() {
     fd.append("emailBodyText", formState.emailBodyText);
     fd.append("emailButtonText", formState.emailButtonText);
     fd.append("accentColor", formState.accentColor);
-    // Real catalog / sample product parameters
-    fd.append("productTitle", sampleProduct.title);
-    fd.append("variantTitle", sampleProduct.variantTitle);
-    fd.append("price", sampleProduct.price.toString());
-    fd.append("variantId", sampleProduct.variantId);
-    fd.append("productImageUrl", sampleProduct.imageUrl);
+    // Real catalog product parameters
+    fd.append("previewProductTitle", previewItem.productTitle);
+    fd.append("previewVariantTitle", previewItem.variantTitle);
+    fd.append("previewPrice", String(previewItem.price));
+    fd.append("previewVariantId", previewItem.variantId);
+    fd.append("previewImageUrl", previewItem.imageUrl || "");
     submit(fd, { method: "POST" });
   };
 
@@ -360,9 +324,12 @@ export default function Settings() {
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3.5">
               <div>
                 <span className="text-xs font-semibold text-[#202223] block">Restock Email Content</span>
-                <p className="text-[11px] text-[#6d7175]">Customize the transactional alert sent to shoppers when inventory replenishes.</p>
+                <p className="text-[11px] text-[#6d7175]">
+                  Customize the transactional alert sent to shoppers when inventory replenishes.
+                </p>
               </div>
 
+              {/* Sender Name & Brand Name */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-[#202223] block mb-1">Sender Name</label>
@@ -389,6 +356,7 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Subject Line & Token Chips */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-medium text-[#202223]">Subject Line</label>
@@ -397,21 +365,21 @@ export default function Settings() {
                     <button
                       type="button"
                       onClick={() => insertVariable("{{product_title}}")}
-                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono cursor-pointer"
+                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
                     >
                       + Product
                     </button>
                     <button
                       type="button"
                       onClick={() => insertVariable("{{price}}")}
-                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono cursor-pointer"
+                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
                     >
                       + Price
                     </button>
                     <button
                       type="button"
                       onClick={() => insertVariable("{{store}}")}
-                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono cursor-pointer"
+                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
                     >
                       + Store
                     </button>
@@ -427,6 +395,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Headline */}
               <div>
                 <label className="text-xs font-medium text-[#202223] block mb-1">Email Headline</label>
                 <input
@@ -439,6 +408,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Body Text */}
               <div>
                 <label className="text-xs font-medium text-[#202223] block mb-1">Body Text</label>
                 <textarea
@@ -451,6 +421,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Button Text & Accent Color */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-[#202223] block mb-1">Button Text</label>
@@ -483,11 +454,13 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Card 2: Storefront PDP Button Settings */}
+            {/* Card 2: Storefront PDP Button Controls */}
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3.5">
               <div>
                 <span className="text-xs font-semibold text-[#202223] block">Storefront PDP Button & Form</span>
-                <p className="text-[11px] text-[#6d7175]">Configure the button shown on out-of-stock product pages.</p>
+                <p className="text-[11px] text-[#6d7175]">
+                  Configure the button shown on out-of-stock product pages.
+                </p>
               </div>
 
               <div>
@@ -617,19 +590,23 @@ export default function Settings() {
                       "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
                   </p>
 
-                  {/* Clean Product Row with True High-Res Photograph */}
+                  {/* Clean Product Row with Aspect-Ratio Preserving Container */}
                   <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                    <img
-                      src={sampleProduct.imageUrl}
-                      alt={sampleProduct.title}
-                      className="w-14 h-14 rounded object-cover border border-[#e1e3e5] shrink-0 bg-white"
-                    />
+                    {previewItem.imageUrl ? (
+                      <div className="w-14 h-18 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                        <img
+                          src={previewItem.imageUrl}
+                          alt={previewItem.productTitle}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                    ) : null}
                     <div className="min-w-0 flex-1">
                       <span className="text-xs font-semibold text-[#111827] block truncate">
-                        {sampleProduct.title}
+                        {previewItem.productTitle}
                       </span>
                       <span className="text-[11px] text-[#6b7280]">
-                        {sampleProduct.variantTitle} · <strong className="text-[#111827]">${sampleProduct.price.toFixed(2)}</strong>
+                        {previewItem.variantTitle} · <strong className="text-[#111827]">${previewItem.price.toFixed(2)}</strong>
                       </span>
                     </div>
                   </div>
@@ -644,10 +621,14 @@ export default function Settings() {
                     Inventory is reserved on a first-come, first-served basis.
                   </div>
 
+                  {/* Compliance Footer with Unsubscribe link */}
                   <div className="text-center pt-2 border-t border-[#f1f2f4]">
-                    <span className="text-[10px] text-[#8c9196]">
+                    <span className="text-[10px] text-[#8c9196] block mb-1">
                       Delivered automatically on behalf of{" "}
                       <strong>{displayBrand}</strong> via RestockPing
+                    </span>
+                    <span className="text-[9px] text-[#9ca3af] underline cursor-pointer">
+                      Unsubscribe from this restock notification
                     </span>
                   </div>
                 </div>
