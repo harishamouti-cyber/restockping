@@ -88,5 +88,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
-  return json({ success: true, message: "Added to restock waitlist!" }, { headers });
+  const settings = await db.restockSettings.findUnique({ where: { shop } });
+  const successMessage = settings?.storefrontSuccessMessage || "Added to restock waitlist!";
+
+  return json({ success: true, message: successMessage }, { headers });
 };

@@ -24,12 +24,15 @@ export interface SendEmailParams {
 
 export type SendRestockEmailOptions = SendEmailParams;
 
+import { sanitizeShopBrandName } from "../utils/brand";
+export { sanitizeShopBrandName };
+
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 465;
 const DEFAULT_SMTP_USER = "harishamouti@gmail.com";
 const DEFAULT_SMTP_PASS = "rzxrokwomyiycgwo";
 const DEFAULT_SMTP_FROM_NAME = "Restock Alerts";
-const DEFAULT_FALLBACK_IMAGE = "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png";
+const DEFAULT_FALLBACK_IMAGE = "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?auto=format&fit=crop&w=400&q=80";
 
 export function getSmtpConfig() {
   const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
@@ -103,7 +106,7 @@ export function generateRestockEmailHtml(params: {
       <body style="margin:0;padding:0;background-color:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
         <!-- Hidden Preheader for Gmail inbox snippet optimization -->
         <div style="display:none;font-size:1px;color:#f6f6f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-          ${headline} - Restocked at ${displayBrand}. Complete your purchase before inventory sells out.
+          ${headline} - Restocked at ${displayBrand}. Grab yours before inventory runs out.
         </div>
 
         <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding:40px 15px;background-color:#f6f6f7;">
@@ -195,7 +198,6 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     to,
     shop,
     storeDisplayName,
-    shopName = shop.replace(".myshopify.com", ""),
     productTitle,
     variantTitle,
     price,
@@ -206,7 +208,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     headline = params.headlineText || params.headline || "Your item is back in stock",
     bodyText = params.bodyText || "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
     buttonText = params.buttonText || "Claim in 1-Click Checkout →",
-    buttonColor = params.buttonColor || params.accentColor || "#805100",
+    buttonColor = params.buttonColor || params.accentColor || "#008060",
     subjectTemplate = params.subjectTemplate || "Back in Stock: {{product_title}} is ready to ship",
     discountCode,
   } = params;
@@ -226,7 +228,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
   const cleanVariantId = String(variantId).replace(/\D/g, "");
   const discountParam = discountCode ? `&discount=${encodeURIComponent(discountCode)}` : "";
   const checkoutUrl = `https://${shop}/cart/${cleanVariantId}:1?checkout[email]=${encodeURIComponent(to)}${discountParam}`;
-  const displayBrand = storeDisplayName?.trim() || shopName || shop.replace(".myshopify.com", "");
+  const displayBrand = sanitizeShopBrandName(shop, storeDisplayName);
 
   const subject = subjectTemplate
     .replace(/\{\{\s*product_title\s*\}\}/g, productTitle)

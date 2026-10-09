@@ -34,6 +34,9 @@ model RestockSettings {
   emailHeadline         String   @default("Your item is back in stock")
   emailBodyText         String   @default("Good news! An item you requested is available again. Complete your order now before inventory runs out.")
   emailButtonText       String   @default("Claim in 1-Click Checkout →")
+  storefrontButtonText    String   @default("Notify Me When Available")
+  storefrontSuccessMessage String  @default("You're on the waitlist! We'll email you the moment stock returns.")
+  storefrontButtonRadius  Int      @default(6)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

@@ -16,6 +16,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (request.method === "OPTIONS") {
     return new Response(null, { headers: getCorsHeaders() });
   }
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+  if (shop) {
+    const settings = await db.restockSettings.findUnique({ where: { shop } });
+    if (settings) {
+      return json({
+        status: "RestockPing App Proxy Active",
+        buttonText: settings.storefrontButtonText || "Notify Me When Available",
+        successMessage: settings.storefrontSuccessMessage || "You're on the waitlist! We'll email you the moment stock returns.",
+        buttonRadius: settings.storefrontButtonRadius ?? 6,
+        accentColor: settings.accentColor || "#008060",
+      }, { headers: getCorsHeaders() });
+    }
+  }
   return json({ status: "RestockPing App Proxy Active" }, { headers: getCorsHeaders() });
 }
 
@@ -160,8 +174,12 @@ export async function action({ request }: ActionFunctionArgs) {
     },
   });
 
+  const settings = await db.restockSettings.findUnique({ where: { shop } });
+  const successMessage =
+    settings?.storefrontSuccessMessage || "Notification request saved successfully!";
+
   return json(
-    { success: true, message: "Notification request saved successfully!" },
+    { success: true, message: successMessage },
     { headers: corsHeaders }
   );
 }

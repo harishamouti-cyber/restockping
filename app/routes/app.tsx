@@ -56,6 +56,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailBodyText" TEXT NOT NULL DEFAULT 'Good news! An item you requested is available again. Complete your order now before inventory runs out.'`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailButtonText" TEXT NOT NULL DEFAULT 'Claim in 1-Click Checkout →'`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storeDisplayName" TEXT DEFAULT ''`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storefrontButtonText" TEXT DEFAULT 'Notify Me When Available'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storefrontSuccessMessage" TEXT DEFAULT 'You''re on the waitlist! We''ll email you the moment stock returns.'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storefrontButtonRadius" INTEGER DEFAULT 6`,
       `CREATE TABLE IF NOT EXISTS "InventoryItemMapping" (
         "inventoryItemId" TEXT PRIMARY KEY,
         "shop" TEXT NOT NULL,

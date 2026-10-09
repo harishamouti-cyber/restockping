@@ -34,6 +34,22 @@
     const initialVariantAvailable = window.ShopifyAnalytics?.meta?.selectedVariant?.available ?? false;
     updateAvailability(initialVariantAvailable);
 
+    // Apply merchant custom button text & corner radius from app settings
+    const shopDomain = root.dataset.shopDomain || '';
+    if (shopDomain) {
+      fetch('/apps/restockping/subscribe?shop=' + encodeURIComponent(shopDomain))
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) {
+          if (cfg && cfg.buttonText && submitBtn) {
+            submitBtn.textContent = cfg.buttonText;
+          }
+          if (cfg && typeof cfg.buttonRadius === 'number' && submitBtn) {
+            submitBtn.style.borderRadius = cfg.buttonRadius + 'px';
+          }
+        })
+        .catch(function() {});
+    }
+
     // Listen for Dawn variant changes
     document.addEventListener('change', function(e) {
       if (e.target.matches('[name="id"]') || e.target.closest('variant-selects, variant-radios')) {
@@ -84,7 +100,7 @@
 
           const data = await res.json();
           if (data.success) {
-            showFeedback("You're on the list! We'll notify you the moment it restocks.", "#059669");
+            showFeedback(data.message || "You're on the list! We'll notify you the moment it restocks.", "#059669");
             if (emailInput) emailInput.value = "";
           } else {
             showFeedback(data.error || "Could not register request. Try again.", "#e11d48");

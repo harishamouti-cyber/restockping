@@ -4,36 +4,38 @@ import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
+import { sanitizeShopBrandName } from "../utils/brand";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const defaultBrand = shop.replace(".myshopify.com", "");
-  const formattedBrand = defaultBrand.charAt(0).toUpperCase() + defaultBrand.slice(1);
-
+  const sanitizedDefault = sanitizeShopBrandName(shop);
   const settingsRecord = await db.restockSettings.findUnique({ where: { shop } });
 
   const settings = {
-    storeDisplayName: settingsRecord?.storeDisplayName || formattedBrand,
+    storeDisplayName: settingsRecord?.storeDisplayName || sanitizedDefault,
     dripBatchMultiplier: settingsRecord?.dripBatchMultiplier ?? 2.5,
     dripIntervalMinutes: settingsRecord?.dripIntervalMinutes ?? 120,
     minRestockThreshold: settingsRecord?.minRestockThreshold ?? 1,
-    accentColor: settingsRecord?.accentColor ?? "#805100",
+    accentColor: settingsRecord?.accentColor ?? "#008060",
     senderName: settingsRecord?.senderName ?? "Fulfillment Center",
     emailSubjectTemplate: settingsRecord?.emailSubjectTemplate ?? "Back in Stock: {{product_title}} is ready to ship",
     emailHeadline: settingsRecord?.emailHeadline ?? "Your item is back in stock",
     emailBodyText: settingsRecord?.emailBodyText ?? "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
     emailButtonText: settingsRecord?.emailButtonText ?? "Claim in 1-Click Checkout →",
+    storefrontButtonText: settingsRecord?.storefrontButtonText ?? "Notify Me When Available",
+    storefrontSuccessMessage: settingsRecord?.storefrontSuccessMessage ?? "You're on the waitlist! We'll email you the moment stock returns.",
+    storefrontButtonRadius: settingsRecord?.storefrontButtonRadius ?? 6,
   };
 
-  // Fetch real product with a live Shopify CDN image from the store catalog
+  // Default sample product with high-resolution photograph
   let sampleProduct = {
     title: "The Out of Stock Snowboard",
     variantTitle: "Standard Edition",
     price: 885.95,
     variantId: "gid://shopify/ProductVariant/123456789",
-    imageUrl: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-lifestyle-1.png",
+    imageUrl: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?auto=format&fit=crop&w=400&q=80",
   };
 
   try {
@@ -63,12 +65,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const node = data.data?.products?.nodes?.[0];
     if (node) {
       const variantNode = node.variants?.nodes?.[0];
+      const liveImg = variantNode?.image?.url || node.featuredImage?.url;
       sampleProduct = {
         title: node.title,
         variantTitle: variantNode?.title || "Standard Edition",
         price: parseFloat(variantNode?.price || "885.95"),
         variantId: variantNode?.id || "gid://shopify/ProductVariant/123456789",
-        imageUrl: variantNode?.image?.url || node.featuredImage?.url || sampleProduct.imageUrl,
+        imageUrl: liveImg && liveImg.startsWith("http") ? liveImg : sampleProduct.imageUrl,
       };
     }
   } catch (err) {
@@ -76,7 +79,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   return json({
-    settings,
+    settings: {
+      ...settings,
+      storeDisplayName: settings.storeDisplayName || sanitizedDefault,
+    },
     shop,
     sampleProduct,
     defaultRecipient: "harishamouti@gmail.com",
@@ -101,17 +107,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         storeDisplayName: String(formData.get("storeDisplayName") || ""),
         productTitle: String(formData.get("productTitle") || "The Out of Stock Snowboard"),
         variantTitle: String(formData.get("variantTitle") || "Standard Edition"),
-        price: parseFloat(String(formData.get("price")) || "0"),
+        price: parseFloat(String(formData.get("price")) || "885.95"),
         variantId: String(formData.get("variantId") || "gid://shopify/ProductVariant/123456789"),
-        productImageUrl: String(formData.get("productImageUrl") || ""),
+        productImageUrl: String(formData.get("productImageUrl") || "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?auto=format&fit=crop&w=400&q=80"),
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
         buttonText: String(formData.get("emailButtonText") || "Claim in 1-Click Checkout →"),
-        buttonColor: String(formData.get("accentColor") || "#805100"),
+        buttonColor: String(formData.get("accentColor") || "#008060"),
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
       });
-      return json({ success: true, message: `Test email sent to ${targetEmail} with live product photography!` });
+      return json({ success: true, message: `Test email successfully delivered to ${targetEmail}!` });
     } catch (err: any) {
       console.error("[Test Send Error]:", err);
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
@@ -123,12 +129,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const dripBatchMultiplier = parseFloat(String(formData.get("dripBatchMultiplier")) || "2.5") || 2.5;
   const dripIntervalMinutes = parseInt(String(formData.get("dripIntervalMinutes")) || "120", 10) || 120;
   const minRestockThreshold = parseInt(String(formData.get("minRestockThreshold")) || "1", 10) || 1;
-  const accentColor = String(formData.get("accentColor") || "#805100");
+  const accentColor = String(formData.get("accentColor") || "#008060");
   const senderName = String(formData.get("senderName") || "Fulfillment Center");
   const emailSubjectTemplate = String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship");
   const emailHeadline = String(formData.get("emailHeadline") || "Your item is back in stock");
   const emailBodyText = String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out.");
   const emailButtonText = String(formData.get("emailButtonText") || "Claim in 1-Click Checkout →");
+  const storefrontButtonText = String(formData.get("storefrontButtonText") || "Notify Me When Available");
+  const storefrontSuccessMessage = String(formData.get("storefrontSuccessMessage") || "You're on the waitlist! We'll email you the moment stock returns.");
+  const storefrontButtonRadius = parseInt(String(formData.get("storefrontButtonRadius")) || "6", 10);
 
   await db.restockSettings.upsert({
     where: { shop: session.shop },
@@ -143,6 +152,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       emailHeadline,
       emailBodyText,
       emailButtonText,
+      storefrontButtonText,
+      storefrontSuccessMessage,
+      storefrontButtonRadius,
     },
     create: {
       shop: session.shop,
@@ -156,6 +168,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       emailHeadline,
       emailBodyText,
       emailButtonText,
+      storefrontButtonText,
+      storefrontSuccessMessage,
+      storefrontButtonRadius,
     },
   });
 
@@ -171,8 +186,8 @@ export default function Settings() {
   const [formState, setFormState] = useState(settings);
   const [testEmail, setTestEmail] = useState(defaultRecipient);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
-  const [isDirty, setIsDirty] = useState(false);
   const [activeField, setActiveField] = useState<string>("emailSubjectTemplate");
+  const [isDirty, setIsDirty] = useState(false);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
 
@@ -246,7 +261,7 @@ export default function Settings() {
     fd.append("emailBodyText", formState.emailBodyText);
     fd.append("emailButtonText", formState.emailButtonText);
     fd.append("accentColor", formState.accentColor);
-    // Real catalog product parameters
+    // Real catalog / sample product parameters
     fd.append("productTitle", sampleProduct.title);
     fd.append("variantTitle", sampleProduct.variantTitle);
     fd.append("price", sampleProduct.price.toString());
@@ -264,7 +279,7 @@ export default function Settings() {
     navigation.formData?.get("intent") === "SAVE_SETTINGS";
 
   const displayBrand =
-    formState.storeDisplayName?.trim() || shop.replace(".myshopify.com", "");
+    formState.storeDisplayName?.trim() || sanitizeShopBrandName(shop);
 
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-24 font-sans text-[#202223] antialiased">
@@ -337,11 +352,11 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 2-Column Split: Controls vs Sticky WYSIWYG Device Preview */}
+        {/* 2-Column Split: Controls vs Sticky Live Device Preview */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
           {/* Left Column: Form Controls */}
           <div className="lg:col-span-6 space-y-3.5">
-            {/* Card 1: Email Content */}
+            {/* Card 1: Restock Email Content */}
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3.5">
               <div>
                 <span className="text-xs font-semibold text-[#202223] block">Restock Email Content</span>
@@ -366,7 +381,7 @@ export default function Settings() {
                     ref={(el) => (inputRefs.current.storeDisplayName = el)}
                     type="text"
                     value={formState.storeDisplayName}
-                    placeholder="e.g. MyStore"
+                    placeholder="e.g. RankPilot"
                     onFocus={() => setActiveField("storeDisplayName")}
                     onChange={(e) => handleChange("storeDisplayName", e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
@@ -410,9 +425,6 @@ export default function Settings() {
                   onChange={(e) => handleChange("emailSubjectTemplate", e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
                 />
-                <span className="text-[10px] text-[#8c9196] mt-0.5 block">
-                  Variables will be replaced dynamically with live product and store details.
-                </span>
               </div>
 
               <div>
@@ -471,7 +483,53 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Card 2: Pacing & Dispatch Rules */}
+            {/* Card 2: Storefront PDP Button Settings */}
+            <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3.5">
+              <div>
+                <span className="text-xs font-semibold text-[#202223] block">Storefront PDP Button & Form</span>
+                <p className="text-[11px] text-[#6d7175]">Configure the button shown on out-of-stock product pages.</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Storefront Button Text</label>
+                <input
+                  ref={(el) => (inputRefs.current.storefrontButtonText = el)}
+                  type="text"
+                  value={formState.storefrontButtonText}
+                  onFocus={() => setActiveField("storefrontButtonText")}
+                  onChange={(e) => handleChange("storefrontButtonText", e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Signup Success Message</label>
+                <input
+                  ref={(el) => (inputRefs.current.storefrontSuccessMessage = el)}
+                  type="text"
+                  value={formState.storefrontSuccessMessage}
+                  onFocus={() => setActiveField("storefrontSuccessMessage")}
+                  onChange={(e) => handleChange("storefrontSuccessMessage", e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">Button Corner Radius (px)</label>
+                <input
+                  ref={(el) => (inputRefs.current.storefrontButtonRadius = el as any)}
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={formState.storefrontButtonRadius}
+                  onFocus={() => setActiveField("storefrontButtonRadius")}
+                  onChange={(e) => handleChange("storefrontButtonRadius", parseInt(e.target.value, 10) || 0)}
+                  className="w-32 px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                />
+              </div>
+            </div>
+
+            {/* Card 3: Pacing & Dispatch Rules */}
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
               <div>
                 <span className="text-xs font-semibold text-[#202223] block">Pacing & Dispatch Rules</span>
@@ -536,7 +594,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Responsive Container / Mobile Phone Bezel */}
+              {/* Device Bezel Shell */}
               <div
                 className={`w-full transition-all duration-300 flex justify-center ${
                   previewMode === "mobile"
@@ -544,7 +602,6 @@ export default function Settings() {
                     : "max-w-[500px]"
                 }`}
               >
-                {/* Simulated Email Card */}
                 <div className="w-full bg-white border border-[#e1e3e5] rounded-lg p-5 shadow-xs space-y-3.5">
                   {previewMode === "mobile" && (
                     <div className="w-16 h-1 bg-slate-300 rounded-full mx-auto -mt-2 mb-2" />
@@ -560,29 +617,26 @@ export default function Settings() {
                       "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
                   </p>
 
-                  {/* Real Product Card with True CDN Image */}
-                  <div className="flex items-center gap-3 p-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                  {/* Clean Product Row with True High-Res Photograph */}
+                  <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
                     <img
                       src={sampleProduct.imageUrl}
                       alt={sampleProduct.title}
-                      className="w-16 h-16 rounded-lg object-cover border border-[#e5e7eb] bg-white shrink-0"
+                      className="w-14 h-14 rounded object-cover border border-[#e1e3e5] shrink-0 bg-white"
                     />
                     <div className="min-w-0 flex-1">
                       <span className="text-xs font-semibold text-[#111827] block truncate">
                         {sampleProduct.title}
                       </span>
-                      <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-slate-100 rounded text-[10px] text-[#4b5563] font-medium">
-                        {sampleProduct.variantTitle}
-                      </span>
-                      <span className="text-xs font-bold text-[#111827] block mt-1">
-                        ${sampleProduct.price.toFixed(2)}
+                      <span className="text-[11px] text-[#6b7280]">
+                        {sampleProduct.variantTitle} · <strong className="text-[#111827]">${sampleProduct.price.toFixed(2)}</strong>
                       </span>
                     </div>
                   </div>
 
                   <div
-                    style={{ backgroundColor: formState.accentColor || "#805100" }}
-                    className="w-full py-2.5 text-xs font-semibold text-white text-center rounded-md cursor-default shadow-xs break-words transition-colors"
+                    style={{ backgroundColor: formState.accentColor || "#008060" }}
+                    className="w-full py-2.5 text-xs font-semibold text-white text-center rounded-md cursor-default shadow-xs transition-colors"
                   >
                     {formState.emailButtonText || "Claim in 1-Click Checkout →"}
                   </div>
