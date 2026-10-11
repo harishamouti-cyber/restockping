@@ -30,17 +30,21 @@ export { sanitizeShopBrandName };
 
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 465;
-const DEFAULT_SMTP_USER = "harishamouti@gmail.com";
-const DEFAULT_SMTP_PASS = "rzxrokwomyiycgwo";
 const DEFAULT_SMTP_FROM_NAME = "Restock Alerts";
 
 export function getSmtpConfig() {
   const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || String(DEFAULT_SMTP_PORT), 10);
   const secure = process.env.SMTP_SECURE === "true" || port === 465;
-  const user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
-  const pass = (process.env.SMTP_PASS || DEFAULT_SMTP_PASS).replace(/\s+/g, "");
+  const user = (process.env.SMTP_USER || "").trim();
+  const pass = (process.env.SMTP_PASS || "").replace(/\s+/g, "");
   const fromName = process.env.SMTP_FROM_NAME || DEFAULT_SMTP_FROM_NAME;
+
+  if (!user || !pass) {
+    throw new Error(
+      "SMTP credentials missing. Please configure SMTP_USER and SMTP_PASS environment variables."
+    );
+  }
 
   return { host, port, secure, user, pass, fromName };
 }
@@ -89,12 +93,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     replyTo,
   } = params;
 
-  const { user, pass } = getSmtpConfig();
-
-  if (!user || !pass) {
-    throw new Error("SMTP configuration missing in .env.");
-  }
-
+  const { user } = getSmtpConfig();
   const mailClient = getTransporter();
 
   // Strip markdown brackets [url](url) if present
@@ -114,14 +113,13 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${price.toFixed(2)}`)
     .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
-  const imageHtml = cleanImageUrl && cleanImageUrl.startsWith("http")
+  const safeImageUrl = /^https:\/\/(?:[a-zA-Z0-9-]+\.)?cdn\.shopify\.com\//i.test(cleanImageUrl) ? cleanImageUrl : "";
+  const imageHtml = safeImageUrl
     ? `<td width="92" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
-         <img src="${cleanImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:104px;width:auto;height:auto;object-fit:contain;display:block;margin:0 auto;" />
+         <img src="${safeImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:104px;width:auto;height:auto;object-fit:contain;display:block;margin:0 auto;" />
        </td>`
-    : `<td width="72" align="center" valign="middle" style="background-color:#f3f4f6;border:1px dashed #d1d5db;border-radius:8px;padding:12px 6px;text-align:center;">
-         <div style="font-size:18px;line-height:1;color:#9ca3af;">📷</div>
-         <div style="font-size:10px;color:#9ca3af;font-weight:500;margin-top:4px;line-height:1.2;">No photo</div>
-       </td>`;
+    : "";
+  const productTextPadding = safeImageUrl ? "padding-left:14px;" : "padding-left:0;";
 
   const html = `
     <!DOCTYPE html>
@@ -161,7 +159,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
                     <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
                       <tr>
                         ${imageHtml}
-                        <td style="padding-left:14px;" valign="middle">
+                        <td style="${productTextPadding}" valign="middle">
                           <div style="font-size:14px;font-weight:600;color:#111827;">${productTitle}</div>
                           <div style="font-size:12px;color:#6b7280;margin-top:2px;">
                             ${variantTitle !== "Default Title" ? variantTitle : "Standard Edition"} · <strong style="color:#111827;">$${price.toFixed(2)}</strong>

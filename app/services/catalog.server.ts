@@ -262,33 +262,8 @@ export async function getAllActiveCatalogProducts(
     console.error("[GraphQL GetAllCatalogProducts Error]:", err);
   }
 
-  // Graceful fallback for brand-new dev stores with empty catalog
-  return [
-    {
-      productId: "gid://shopify/Product/sample_snowboard",
-      variantId: "gid://shopify/ProductVariant/sample_snowboard_std",
-      productTitle: "The Out of Stock Snowboard",
-      variantTitle: "Standard Edition",
-      price: 885.95,
-      imageUrl: "",
-    },
-    {
-      productId: "gid://shopify/Product/sample_hoodie",
-      variantId: "gid://shopify/ProductVariant/sample_hoodie_blk",
-      productTitle: "Heavyweight Cotton Hoodie",
-      variantTitle: "Washed Black / Large",
-      price: 110.0,
-      imageUrl: "",
-    },
-    {
-      productId: "gid://shopify/Product/sample_sneakers",
-      variantId: "gid://shopify/ProductVariant/sample_sneakers_10",
-      productTitle: "Trail Runner Sport Shoes",
-      variantTitle: "Slate Grey / US 10",
-      price: 165.0,
-      imageUrl: "",
-    },
-  ];
+  // Do not invent sample products: callers should show an explicit empty catalog state.
+  return [];
 }
 
 // Backward-compatible adapter for existing callers

@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "./email.server";
+import { getLiveProductMedia, type ResolvedProductMedia } from "./catalog.server";
 
 export interface MetricCalculations {
   totalRegistered: number;
@@ -239,20 +240,33 @@ export async function processInventoryRestock({
   );
 
   const cohort = pendingSubscribers.slice(0, targetBatchSize);
+  const liveMediaByVariant = new Map<string, ResolvedProductMedia | null>();
   let sent = 0;
 
   for (const sub of cohort) {
     if (!sub.customerEmail) continue;
 
+    let liveMedia: ResolvedProductMedia | null = null;
+    if (admin) {
+      try {
+        if (!liveMediaByVariant.has(sub.variantId)) {
+          liveMediaByVariant.set(sub.variantId, await getLiveProductMedia(admin, sub.variantId));
+        }
+        liveMedia = liveMediaByVariant.get(sub.variantId) || null;
+      } catch (mediaError) {
+        console.error("[Restock email product media lookup failed]", mediaError);
+      }
+    }
+
     try {
       await sendRestockNotificationEmail({
         to: sub.customerEmail,
         shop,
-        productTitle: sub.productTitle,
-        variantTitle: sub.variantTitle,
-        price: Number(sub.priceSnapshot) || 0,
-        variantId: sub.variantId,
-        productImageUrl: sub.productImageUrl || undefined,
+        productTitle: liveMedia?.productTitle || sub.productTitle,
+        variantTitle: liveMedia?.variantTitle || sub.variantTitle,
+        price: liveMedia?.price ?? (Number(sub.priceSnapshot) || 0),
+        variantId: liveMedia?.variantId || sub.variantId,
+        productImageUrl: liveMedia ? liveMedia.imageUrl || undefined : sub.productImageUrl || undefined,
         storeDisplayName: (settings as any).storeDisplayName || undefined,
         senderName: settings.senderName,
         subjectTemplate: settings.emailSubjectTemplate,

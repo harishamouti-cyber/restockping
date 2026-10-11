@@ -4,7 +4,7 @@ import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
-import { getAllActiveCatalogProducts, type CatalogProductOption } from "../services/catalog.server";
+import { getAllActiveCatalogProducts, getLiveProductMedia, type CatalogProductOption } from "../services/catalog.server";
 import { sanitizeShopBrandName } from "../utils/brand";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -38,12 +38,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     catalogProducts.length === 0 ||
     catalogProducts.some((p) => p.productId.includes("sample_"));
 
-  const defaultPreview: CatalogProductOption = catalogProducts[0] || {
-    productId: "sample_p1",
-    variantId: "gid://shopify/ProductVariant/123456789",
-    productTitle: "The Out of Stock Snowboard",
-    variantTitle: "Standard Edition",
-    price: 885.95,
+  const defaultPreview: CatalogProductOption = catalogProducts.find((product) => product.imageUrl) || catalogProducts[0] || {
+    productId: "",
+    variantId: "",
+    productTitle: "No Shopify products available",
+    variantTitle: "Add a product to preview its real image",
+    price: 0,
     imageUrl: "",
   };
 
@@ -58,12 +58,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     previewItem: defaultPreview,
     catalogProducts,
     isSampleCatalog,
-    defaultRecipient: "harishamouti@gmail.com",
+    defaultRecipient: "",
   });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -74,15 +74,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
+      const selectedVariantId = String(formData.get("previewVariantId") || "");
+      const liveProduct = selectedVariantId ? await getLiveProductMedia(admin, selectedVariantId) : null;
+      if (!liveProduct) {
+        return json({ success: false, error: "Choose a real product variant from this store before sending a test email." }, { status: 400 });
+      }
       await sendRestockNotificationEmail({
         to: targetEmail,
         shop: session.shop,
         storeDisplayName: String(formData.get("storeDisplayName") || ""),
-        productTitle: String(formData.get("previewProductTitle") || "The Out of Stock Snowboard"),
-        variantTitle: String(formData.get("previewVariantTitle") || "Standard Edition"),
-        price: parseFloat(String(formData.get("previewPrice")) || "885.95"),
-        variantId: String(formData.get("previewVariantId") || "gid://shopify/ProductVariant/123456789"),
-        productImageUrl: String(formData.get("previewImageUrl") || ""),
+        productTitle: liveProduct.productTitle,
+        variantTitle: liveProduct.variantTitle,
+        price: liveProduct.price,
+        variantId: liveProduct.variantId,
+        productImageUrl: liveProduct.imageUrl || undefined,
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
@@ -91,7 +96,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
         discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
       });
-      return json({ success: true, message: `Test email with real store photography delivered to ${targetEmail}!` });
+      return json({ success: true, message: `Test email for the selected Shopify product sent to ${targetEmail}.` });
     } catch (err: any) {
       console.error("[Test Send Error]:", err);
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
@@ -369,7 +374,14 @@ export default function Settings() {
             <button
               type="button"
               onClick={handleSendTest}
-              disabled={isSendingTest}
+              disabled={isSendingTest || isSampleCatalog || !testEmail.includes("@")}
+              title={
+                isSampleCatalog
+                  ? "Add active products in Shopify to send a test email"
+                  : !testEmail.includes("@")
+                  ? "Enter a valid email address to send a test email"
+                  : "Send a test restock email"
+              }
               className="px-3.5 py-1 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
             >
               {isSendingTest ? "Sending..." : "Send Test Email"}
@@ -666,17 +678,30 @@ export default function Settings() {
                         {p.productTitle} — {p.variantTitle} (${p.price.toFixed(2)})
                       </option>
                     ))}
+                    {isSampleCatalog && <option value="">No real Shopify products found</option>}
                   </select>
                 </div>
                 {isSampleCatalog && (
                   <span
                     className="text-[10px] font-semibold bg-[#fff4e5] text-[#b98900] px-2 py-0.5 rounded border border-[#f5b854] shrink-0"
-                    title="Store catalog returned no products; displaying sample catalog"
+                    title="No real Shopify catalog products are available to preview"
                   >
-                    Sample Data
+                    No catalog products
                   </span>
                 )}
               </div>
+              {isSampleCatalog ? (
+                <div className="w-full text-center py-4 px-3 bg-[#fffbf2] border border-[#f5b854] rounded-lg mb-3">
+                  <p className="text-xs font-semibold text-[#8a6116]">No active products found in store catalog</p>
+                  <p className="text-[11px] text-[#6d7175] mt-0.5">
+                    Add or activate products in your Shopify admin to preview restock alert layouts and send test emails.
+                  </p>
+                </div>
+              ) : (!activePreviewItem.imageUrl || imgLoadError) ? (
+                <p className="w-full text-[11px] text-[#8a6116] bg-[#fff8e5] border border-[#f1d58a] rounded-md px-2.5 py-2 mb-3">
+                  This Shopify product has no usable image. Add or restore its product image in Shopify to include it in restock emails.
+                </p>
+              ) : null}
 
               <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3">
                 {/* Primary Preview Mode Switcher */}
@@ -767,23 +792,16 @@ export default function Settings() {
 
                     {/* Clean Product Row with Aspect-Ratio Preserving Container & Deliberate No-Image State */}
                     <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                      <div className="w-16 h-22 bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
-                        {activePreviewItem.imageUrl && !imgLoadError ? (
+                      {activePreviewItem.imageUrl && !imgLoadError && (
+                        <div className="w-16 h-[88px] bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
                           <img
                             src={activePreviewItem.imageUrl}
                             alt={activePreviewItem.productTitle}
                             onError={() => setImgLoadError(true)}
                             className="max-w-full max-h-full object-contain block mx-auto"
                           />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-center p-1">
-                            <span className="text-sm text-[#9ca3af]">📷</span>
-                            <span className="text-[9px] text-[#9ca3af] font-medium leading-tight mt-0.5">
-                              No image
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <span className="text-xs font-semibold text-[#111827] block truncate">
                           {activePreviewItem.productTitle}
