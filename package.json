@@ -14,6 +14,7 @@
     "prisma": "prisma",
     "setup": "prisma generate && prisma migrate deploy",
     "audit": "tsx scripts/audit-preflight.ts",
+    "test:media": "tsx scripts/test-media-resolution.ts",
     "assets": "tsx scripts/generate-app-store-assets.ts"
   },
   "dependencies": {

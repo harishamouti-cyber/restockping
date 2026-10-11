@@ -1,5 +1,6 @@
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import db from "../db.server";
+import { normalizeShopifyImageUrl } from "../services/catalog.server";
 
 function corsHeaders() {
   return {
@@ -35,7 +36,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const productTitle = String(formData.get("productTitle") || "Product");
   const variantTitle = String(formData.get("variantTitle") || "Default Title");
   const priceSnapshot = parseFloat(String(formData.get("price") || "0.00"));
-  const productImageUrl = String(formData.get("productImageUrl") || "").trim();
+  const rawImageUrl = String(formData.get("productImageUrl") || "").trim();
+  const normalized = normalizeShopifyImageUrl(rawImageUrl, shop, 600);
+  const productImageUrl = normalized.isValid ? normalized.url : (rawImageUrl.startsWith("http") ? rawImageUrl : null);
 
   if (!shop || !customerEmail || !variantId) {
     return json({ error: "Missing required fields" }, { status: 400, headers });

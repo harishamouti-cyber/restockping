@@ -4,15 +4,25 @@
   Captures featured product image directly at signup
 {% endcomment %}
 
+{% assign current_variant = product.selected_or_first_available_variant | default: product.variants.first %}
+{% assign raw_img = current_variant.image | default: product.featured_image | default: product.media.first.preview_image %}
+{% assign featured_image_url = '' %}
+{% if raw_img %}
+  {% assign featured_image_url = raw_img | image_url: width: 600 %}
+  {% if featured_image_url contains '//' and featured_image_url contains 'https:' == false %}
+    {% assign featured_image_url = 'https:' | append: featured_image_url %}
+  {% endif %}
+{% endif %}
+
 <div
   class="restockping-wrapper"
   data-restockping-root
   data-product-id="{{ product.id }}"
   data-product-title="{{ product.title | escape }}"
-  data-product-image="{{ product.selected_or_first_available_variant.image | default: product.featured_image | image_url: width: 400 }}"
-  data-selected-variant-id="{{ product.selected_or_first_available_variant.id }}"
-  data-selected-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
-  data-selected-variant-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
+  data-product-image="{{ featured_image_url }}"
+  data-selected-variant-id="{{ current_variant.id }}"
+  data-selected-variant-title="{{ current_variant.title | escape }}"
+  data-selected-variant-price="{{ current_variant.price | divided_by: 100.0 }}"
   data-shop-domain="{{ shop.permanent_domain }}"
   data-proxy-base="/apps/restockping"
   data-accent-color="{{ block.settings.accent_color | default: '#008060' }}"
@@ -47,7 +57,7 @@
         type="hidden"
         id="restock-product-image"
         name="productImageUrl"
-        value="{{ product.selected_or_first_available_variant.image | default: product.featured_image | image_url: width: 400 }}"
+        value="{{ featured_image_url }}"
       />
       <input
         type="email"

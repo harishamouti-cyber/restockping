@@ -4,7 +4,7 @@ import { useLoaderData, useSubmit, useSearchParams, useNavigate, useActionData }
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
-import { getLiveProductMedia, getVariantProductMedia } from "../services/catalog.server";
+import { getLiveProductMedia, getVariantProductMedia, normalizeShopifyImageUrl } from "../services/catalog.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
 import { generateCartPermalink } from "../utils/permalink";
@@ -164,25 +164,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      let imageUrl = subscriber.productImageUrl;
-      if (!imageUrl) {
-        try {
-          const media = await getLiveProductMedia(admin, subscriber.variantId);
-          imageUrl = media?.imageUrl || null;
-        } catch (err) {
-          console.error("[Catalog Media Fetch Error]:", err);
-        }
+      let liveMedia = null;
+      try {
+        liveMedia = await getLiveProductMedia(admin, subscriber.variantId, subscriber.productId);
+      } catch (err) {
+        console.error("[Catalog Media Fetch Error in Single Dispatch]:", err);
       }
+
+      const rawImg = liveMedia?.imageUrl || subscriber.productImageUrl || undefined;
+      const normalizedImg = normalizeShopifyImageUrl(rawImg, session.shop);
+      const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
 
       await sendRestockNotificationEmail({
         to: subscriber.customerEmail,
         shop: session.shop,
         storeDisplayName: settings?.storeDisplayName || undefined,
-        productTitle: subscriber.productTitle,
-        variantTitle: subscriber.variantTitle,
-        price: Number(subscriber.priceSnapshot) || 0,
-        variantId: subscriber.variantId,
-        productImageUrl: imageUrl || undefined,
+        productTitle: liveMedia?.productTitle || subscriber.productTitle,
+        variantTitle: liveMedia?.variantTitle || subscriber.variantTitle,
+        price: liveMedia?.price ?? (Number(subscriber.priceSnapshot) || 0),
+        variantId: liveMedia?.variantId || subscriber.variantId,
+        productImageUrl: finalImageUrl,
         senderName: settings?.senderName,
         subjectTemplate: settings?.emailSubjectTemplate,
         headlineText: settings?.emailHeadline,
@@ -198,7 +199,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data: {
           status: "DISPATCHED",
           dispatchedAt: new Date(),
-          ...(imageUrl && !subscriber.productImageUrl ? { productImageUrl: imageUrl } : {}),
+          ...(finalImageUrl && !subscriber.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
         },
       });
 
@@ -217,29 +218,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     let deliveredCount = 0;
     let failedCount = 0;
+    const liveMediaByVariant = new Map<string, any>();
 
     for (const sub of subscribers) {
       if (!sub.customerEmail) continue;
       try {
-        let imageUrl = sub.productImageUrl;
-        if (!imageUrl) {
-          try {
-            const media = await getLiveProductMedia(admin, sub.variantId);
-            imageUrl = media?.imageUrl || null;
-          } catch (err) {
-            console.error("[Catalog Media Fetch Error]:", err);
+        let liveMedia = null;
+        try {
+          if (!liveMediaByVariant.has(sub.variantId)) {
+            liveMediaByVariant.set(sub.variantId, await getLiveProductMedia(admin, sub.variantId, sub.productId));
           }
+          liveMedia = liveMediaByVariant.get(sub.variantId);
+        } catch (err) {
+          console.error("[Catalog Media Fetch Error in Bulk Dispatch]:", err);
         }
+
+        const rawImg = liveMedia?.imageUrl || sub.productImageUrl || undefined;
+        const normalizedImg = normalizeShopifyImageUrl(rawImg, session.shop);
+        const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
 
         await sendRestockNotificationEmail({
           to: sub.customerEmail,
           shop: session.shop,
           storeDisplayName: settings?.storeDisplayName || undefined,
-          productTitle: sub.productTitle,
-          variantTitle: sub.variantTitle,
-          price: Number(sub.priceSnapshot) || 0,
-          variantId: sub.variantId,
-          productImageUrl: imageUrl || undefined,
+          productTitle: liveMedia?.productTitle || sub.productTitle,
+          variantTitle: liveMedia?.variantTitle || sub.variantTitle,
+          price: liveMedia?.price ?? (Number(sub.priceSnapshot) || 0),
+          variantId: liveMedia?.variantId || sub.variantId,
+          productImageUrl: finalImageUrl,
           senderName: settings?.senderName,
           subjectTemplate: settings?.emailSubjectTemplate,
           headlineText: settings?.emailHeadline,
@@ -255,7 +261,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           data: {
             status: "DISPATCHED",
             dispatchedAt: new Date(),
-            ...(imageUrl && !sub.productImageUrl ? { productImageUrl: imageUrl } : {}),
+            ...(finalImageUrl && !sub.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
           },
         });
 

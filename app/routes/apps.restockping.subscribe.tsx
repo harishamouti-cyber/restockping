@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import db from "../db.server";
 import { checkRateLimit, verifyAppProxyHmac } from "../services/proxySecurity.server";
+import { normalizeShopifyImageUrl } from "../services/catalog.server";
 
 // CORS headers for App Proxy responses
 function getCorsHeaders() {
@@ -98,7 +99,9 @@ export async function action({ request }: ActionFunctionArgs) {
   const productTitle = String(formData.get("productTitle") || "Product").trim();
   const variantTitle = String(formData.get("variantTitle") || "Default Variant").trim();
   const price = parseFloat(String(formData.get("price") || "0.0")) || 0.0;
-  const productImageUrl = String(formData.get("productImageUrl") || "").trim();
+  const rawImageUrl = String(formData.get("productImageUrl") || "").trim();
+  const normalized = normalizeShopifyImageUrl(rawImageUrl, shop, 600);
+  const productImageUrl = normalized.isValid ? normalized.url : (rawImageUrl.startsWith("http") ? rawImageUrl : null);
 
   if (!shop || !email || !variantId) {
     return json(

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { normalizeShopifyImageUrl } from "./catalog.server";
 
 export interface SendEmailParams {
   to: string;
@@ -113,13 +114,19 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${price.toFixed(2)}`)
     .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
-  const safeImageUrl = /^https:\/\/(?:[a-zA-Z0-9-]+\.)?cdn\.shopify\.com\//i.test(cleanImageUrl) ? cleanImageUrl : "";
+  const normalized = normalizeShopifyImageUrl(cleanImageUrl, shop, 400);
+  const safeImageUrl = normalized.isValid ? normalized.url : "";
   const imageHtml = safeImageUrl
     ? `<td width="92" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
-         <img src="${safeImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:104px;width:auto;height:auto;object-fit:contain;display:block;margin:0 auto;" />
+         <img src="${safeImageUrl}" alt="${productTitle}" width="76" border="0" style="display:block;max-width:76px;max-height:104px;width:auto;height:auto;object-fit:contain;margin:0 auto;border:0;outline:none;text-decoration:none;" />
        </td>`
+    : `<td width="92" align="center" valign="middle" style="background-color:#f9fafb;border:1px dashed #d1d5db;border-radius:8px;padding:12px 6px;text-align:center;">
+         <div style="font-size:22px;line-height:1;color:#9ca3af;margin-bottom:4px;">📷</div>
+         <div style="font-size:9px;color:#9ca3af;font-weight:600;letter-spacing:0.02em;text-transform:uppercase;line-height:1.2;">No Image</div>
+       </td>`;
+  const noImageNote = !safeImageUrl
+    ? `<div style="font-size:11px;color:#9ca3af;margin-top:4px;font-style:italic;">No photo uploaded in store catalog</div>`
     : "";
-  const productTextPadding = safeImageUrl ? "padding-left:14px;" : "padding-left:0;";
 
   const html = `
     <!DOCTYPE html>
@@ -159,11 +166,12 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
                     <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
                       <tr>
                         ${imageHtml}
-                        <td style="${productTextPadding}" valign="middle">
+                        <td style="padding-left:14px;" valign="middle">
                           <div style="font-size:14px;font-weight:600;color:#111827;">${productTitle}</div>
                           <div style="font-size:12px;color:#6b7280;margin-top:2px;">
                             ${variantTitle !== "Default Title" ? variantTitle : "Standard Edition"} · <strong style="color:#111827;">$${price.toFixed(2)}</strong>
                           </div>
+                          ${noImageNote}
                         </td>
                       </tr>
                     </table>

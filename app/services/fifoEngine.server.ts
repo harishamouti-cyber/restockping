@@ -1,6 +1,6 @@
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "./email.server";
-import { getLiveProductMedia, type ResolvedProductMedia } from "./catalog.server";
+import { getLiveProductMedia, normalizeShopifyImageUrl, type ResolvedProductMedia } from "./catalog.server";
 
 export interface MetricCalculations {
   totalRegistered: number;
@@ -250,13 +250,17 @@ export async function processInventoryRestock({
     if (admin) {
       try {
         if (!liveMediaByVariant.has(sub.variantId)) {
-          liveMediaByVariant.set(sub.variantId, await getLiveProductMedia(admin, sub.variantId));
+          liveMediaByVariant.set(sub.variantId, await getLiveProductMedia(admin, sub.variantId, sub.productId));
         }
         liveMedia = liveMediaByVariant.get(sub.variantId) || null;
       } catch (mediaError) {
         console.error("[Restock email product media lookup failed]", mediaError);
       }
     }
+
+    const rawImg = liveMedia?.imageUrl || sub.productImageUrl || undefined;
+    const normalizedImg = normalizeShopifyImageUrl(rawImg, shop);
+    const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
 
     try {
       await sendRestockNotificationEmail({
@@ -266,7 +270,7 @@ export async function processInventoryRestock({
         variantTitle: liveMedia?.variantTitle || sub.variantTitle,
         price: liveMedia?.price ?? (Number(sub.priceSnapshot) || 0),
         variantId: liveMedia?.variantId || sub.variantId,
-        productImageUrl: liveMedia ? liveMedia.imageUrl || undefined : sub.productImageUrl || undefined,
+        productImageUrl: finalImageUrl,
         storeDisplayName: (settings as any).storeDisplayName || undefined,
         senderName: settings.senderName,
         subjectTemplate: settings.emailSubjectTemplate,

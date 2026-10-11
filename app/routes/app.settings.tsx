@@ -792,23 +792,35 @@ export default function Settings() {
 
                     {/* Clean Product Row with Aspect-Ratio Preserving Container & Deliberate No-Image State */}
                     <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                      {activePreviewItem.imageUrl && !imgLoadError && (
-                        <div className="w-16 h-[88px] bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
+                      <div className="w-16 h-[88px] bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
+                        {activePreviewItem.imageUrl && !imgLoadError ? (
                           <img
                             src={activePreviewItem.imageUrl}
                             alt={activePreviewItem.productTitle}
                             onError={() => setImgLoadError(true)}
                             className="max-w-full max-h-full object-contain block mx-auto"
                           />
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-center p-1">
+                            <span className="text-base text-[#9ca3af]">📷</span>
+                            <span className="text-[9px] text-[#9ca3af] font-semibold uppercase tracking-tight mt-0.5">
+                              No image
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <span className="text-xs font-semibold text-[#111827] block truncate">
                           {activePreviewItem.productTitle}
                         </span>
-                        <span className="text-[11px] text-[#6b7280]">
+                        <span className="text-[11px] text-[#6b7280] block truncate">
                           {activePreviewItem.variantTitle} · <strong className="text-[#111827]">${activePreviewItem.price.toFixed(2)}</strong>
                         </span>
+                        {(!activePreviewItem.imageUrl || imgLoadError) && (
+                          <span className="text-[10px] text-[#9ca3af] italic block mt-0.5">
+                            No photo uploaded in store catalog
+                          </span>
+                        )}
                       </div>
                     </div>
 
