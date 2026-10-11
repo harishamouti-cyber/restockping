@@ -24,6 +24,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     minRestockThreshold: 1,
     accentColor: "#008060",
     senderName: "Fulfillment Center",
+    incentiveDiscountCode: "",
     emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
     emailHeadline: "Your item is back in stock",
     emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
@@ -46,6 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     settings: {
       ...activeSettings,
       storeDisplayName: activeSettings.storeDisplayName || sanitizedDefault,
+      incentiveDiscountCode: (activeSettings as any).incentiveDiscountCode || "",
     },
     shop,
     previewItem,
@@ -80,6 +82,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         buttonText: String(formData.get("emailButtonText") || "Claim in 1-Click Checkout →"),
         buttonColor: String(formData.get("accentColor") || "#008060"),
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
+        discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
       });
       return json({ success: true, message: `Test email with real store photography delivered to ${targetEmail}!` });
     } catch (err: any) {
@@ -95,6 +98,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const minRestockThreshold = parseInt(String(formData.get("minRestockThreshold")) || "1", 10) || 1;
   const accentColor = String(formData.get("accentColor") || "#008060");
   const senderName = String(formData.get("senderName") || "Fulfillment Center");
+  const incentiveDiscountCode = String(formData.get("incentiveDiscountCode") || "").trim().toUpperCase();
   const emailSubjectTemplate = String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship");
   const emailHeadline = String(formData.get("emailHeadline") || "Your item is back in stock");
   const emailBodyText = String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out.");
@@ -112,6 +116,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       minRestockThreshold,
       accentColor,
       senderName,
+      incentiveDiscountCode,
       emailSubjectTemplate,
       emailHeadline,
       emailBodyText,
@@ -128,6 +133,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       minRestockThreshold,
       accentColor,
       senderName,
+      incentiveDiscountCode,
       emailSubjectTemplate,
       emailHeadline,
       emailBodyText,
@@ -149,7 +155,9 @@ export default function Settings() {
 
   const [formState, setFormState] = useState(settings);
   const [testEmail, setTestEmail] = useState(defaultRecipient);
+  const [previewTab, setPreviewTab] = useState<"email" | "storefront">("email");
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
+  const [simulatedPDPState, setSimulatedPDPState] = useState<"idle" | "subscribed">("idle");
   const [activeField, setActiveField] = useState<string>("emailSubjectTemplate");
   const [isDirty, setIsDirty] = useState(false);
 
@@ -181,8 +189,7 @@ export default function Settings() {
     });
   };
 
-  const insertVariable = (variable: string) => {
-    const targetKey = activeField in formState ? activeField : "emailSubjectTemplate";
+  const insertVariableIntoField = (targetKey: string, variable: string) => {
     const element = inputRefs.current[targetKey];
 
     if (element && typeof element.selectionStart === "number") {
@@ -200,6 +207,36 @@ export default function Settings() {
       handleChange(targetKey, `${currentVal} ${variable}`.trim());
     }
   };
+
+  const renderVariableChips = (targetField: string) => (
+    <div className="flex items-center gap-1">
+      <span className="text-[10px] text-[#8c9196]">Insert:</span>
+      <button
+        type="button"
+        onClick={() => insertVariableIntoField(targetField, "{{product_title}}")}
+        className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
+        title="Insert product title"
+      >
+        + Product
+      </button>
+      <button
+        type="button"
+        onClick={() => insertVariableIntoField(targetField, "{{price}}")}
+        className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
+        title="Insert product price"
+      >
+        + Price
+      </button>
+      <button
+        type="button"
+        onClick={() => insertVariableIntoField(targetField, "{{store}}")}
+        className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
+        title="Insert store name"
+      >
+        + Store
+      </button>
+    </div>
+  );
 
   const handleSave = () => {
     const fd = new FormData();
@@ -220,6 +257,7 @@ export default function Settings() {
     fd.append("testEmail", testEmail);
     fd.append("storeDisplayName", formState.storeDisplayName);
     fd.append("senderName", formState.senderName);
+    fd.append("incentiveDiscountCode", formState.incentiveDiscountCode || "");
     fd.append("emailSubjectTemplate", formState.emailSubjectTemplate);
     fd.append("emailHeadline", formState.emailHeadline);
     fd.append("emailBodyText", formState.emailBodyText);
@@ -360,30 +398,7 @@ export default function Settings() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-medium text-[#202223]">Subject Line</label>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-[#8c9196]">Insert:</span>
-                    <button
-                      type="button"
-                      onClick={() => insertVariable("{{product_title}}")}
-                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
-                    >
-                      + Product
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => insertVariable("{{price}}")}
-                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
-                    >
-                      + Price
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => insertVariable("{{store}}")}
-                      className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
-                    >
-                      + Store
-                    </button>
-                  </div>
+                  {renderVariableChips("emailSubjectTemplate")}
                 </div>
                 <input
                   ref={(el) => (inputRefs.current.emailSubjectTemplate = el)}
@@ -395,9 +410,12 @@ export default function Settings() {
                 />
               </div>
 
-              {/* Headline */}
+              {/* Headline & Token Chips */}
               <div>
-                <label className="text-xs font-medium text-[#202223] block mb-1">Email Headline</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-[#202223]">Email Headline</label>
+                  {renderVariableChips("emailHeadline")}
+                </div>
                 <input
                   ref={(el) => (inputRefs.current.emailHeadline = el)}
                   type="text"
@@ -408,9 +426,12 @@ export default function Settings() {
                 />
               </div>
 
-              {/* Body Text */}
+              {/* Body Text & Token Chips */}
               <div>
-                <label className="text-xs font-medium text-[#202223] block mb-1">Body Text</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-[#202223]">Body Text</label>
+                  {renderVariableChips("emailBodyText")}
+                </div>
                 <textarea
                   ref={(el) => (inputRefs.current.emailBodyText = el)}
                   rows={3}
@@ -451,6 +472,25 @@ export default function Settings() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Incentive Discount Code */}
+              <div>
+                <label className="text-xs font-medium text-[#202223] block mb-1">
+                  Recovery Discount Code (Optional)
+                </label>
+                <input
+                  ref={(el) => (inputRefs.current.incentiveDiscountCode = el)}
+                  type="text"
+                  value={formState.incentiveDiscountCode || ""}
+                  placeholder="e.g. RESTOCK10"
+                  onFocus={() => setActiveField("incentiveDiscountCode")}
+                  onChange={(e) => handleChange("incentiveDiscountCode", e.target.value.toUpperCase())}
+                  className="w-full px-2.5 py-1.5 text-xs font-mono uppercase bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                />
+                <span className="text-[11px] text-[#6d7175] mt-1 block">
+                  Auto-applied to the customer's 1-click checkout cart link to boost restock conversions.
+                </span>
               </div>
             </div>
 
@@ -536,107 +576,223 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Right Column: Sticky Live Customer Email Preview */}
+          {/* Right Column: Sticky Live Device & Storefront Preview */}
           <div className="lg:col-span-6 sticky top-4 self-start space-y-2">
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col items-center">
-              <div className="w-full flex items-center justify-between mb-3">
-                <div>
-                  <span className="text-xs font-semibold text-[#202223] block">Live Customer Email Preview</span>
-                  <span className="text-[11px] text-[#8c9196]">Rendering live catalog product & photograph</span>
-                </div>
-                {/* Segmented Device Switcher */}
+              <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3">
+                {/* Primary Preview Mode Switcher */}
                 <div className="inline-flex rounded-lg bg-[#f1f2f4] p-0.5 border border-[#e1e3e5]">
                   <button
                     type="button"
-                    onClick={() => setPreviewMode("desktop")}
-                    className={`px-2.5 py-0.5 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
-                      previewMode === "desktop" ? "bg-white text-[#202223] shadow-xs font-semibold" : "text-[#616161]"
+                    onClick={() => setPreviewTab("email")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                      previewTab === "email"
+                        ? "bg-white text-[#202223] shadow-xs font-semibold"
+                        : "text-[#616161] hover:text-[#202223]"
                     }`}
                   >
-                    Desktop
+                    Email Alert
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPreviewMode("mobile")}
-                    className={`px-2.5 py-0.5 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
-                      previewMode === "mobile" ? "bg-white text-[#202223] shadow-xs font-semibold" : "text-[#616161]"
+                    onClick={() => setPreviewTab("storefront")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                      previewTab === "storefront"
+                        ? "bg-white text-[#202223] shadow-xs font-semibold"
+                        : "text-[#616161] hover:text-[#202223]"
                     }`}
                   >
-                    Mobile
+                    Storefront PDP
                   </button>
                 </div>
+
+                {previewTab === "email" ? (
+                  /* Segmented Device Switcher */
+                  <div className="inline-flex rounded-lg bg-[#f1f2f4] p-0.5 border border-[#e1e3e5]">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode("desktop")}
+                      className={`px-2.5 py-0.5 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
+                        previewMode === "desktop" ? "bg-white text-[#202223] shadow-xs font-semibold" : "text-[#616161]"
+                      }`}
+                    >
+                      Desktop
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode("mobile")}
+                      className={`px-2.5 py-0.5 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
+                        previewMode === "mobile" ? "bg-white text-[#202223] shadow-xs font-semibold" : "text-[#616161]"
+                      }`}
+                    >
+                      Mobile
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-[#008060] font-medium bg-[#e3f1df] px-2 py-0.5 rounded">
+                    0.00 CLS Native Block
+                  </span>
+                )}
               </div>
 
-              {/* Device Bezel Shell */}
-              <div
-                className={`w-full transition-all duration-300 flex justify-center ${
-                  previewMode === "mobile"
-                    ? "max-w-[340px] p-2.5 bg-slate-900 rounded-[32px] shadow-xl border-4 border-slate-700"
-                    : "max-w-[500px]"
-                }`}
-              >
-                <div className="w-full bg-white border border-[#e1e3e5] rounded-lg p-5 shadow-xs space-y-3.5">
-                  {previewMode === "mobile" && (
-                    <div className="w-16 h-1 bg-slate-300 rounded-full mx-auto -mt-2 mb-2" />
-                  )}
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#e3f1df] text-[#008060] text-[10px] font-semibold uppercase rounded">
-                    ● Restock Notice
-                  </span>
-                  <h3 className="text-base font-bold text-[#202223] leading-snug break-words">
-                    {formState.emailHeadline || "Your item is back in stock"}
-                  </h3>
-                  <p className="text-xs text-[#6d7175] leading-relaxed break-words">
-                    {formState.emailBodyText ||
-                      "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
-                  </p>
-
-                  {/* Clean Product Row with Aspect-Ratio Preserving Container */}
-                  <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                    <div className="w-14 h-18 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1 shrink-0 overflow-hidden">
-                      {previewItem.imageUrl ? (
-                        <img
-                          src={previewItem.imageUrl}
-                          alt={previewItem.productTitle}
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      ) : (
-                        <div className="text-[10px] text-slate-400 font-medium text-center leading-tight">
-                          In Stock
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-semibold text-[#111827] block truncate">
-                        {previewItem.productTitle}
-                      </span>
-                      <span className="text-[11px] text-[#6b7280]">
-                        {previewItem.variantTitle} · <strong className="text-[#111827]">${previewItem.price.toFixed(2)}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    style={{ backgroundColor: formState.accentColor || "#008060" }}
-                    className="w-full py-2.5 text-xs font-semibold text-white text-center rounded-md cursor-default shadow-xs transition-colors"
-                  >
-                    {formState.emailButtonText || "Claim in 1-Click Checkout →"}
-                  </div>
-                  <div className="text-[10px] text-center text-[#8c9196] -mt-1">
-                    Inventory is reserved on a first-come, first-served basis.
-                  </div>
-
-                  {/* Compliance Footer with Unsubscribe link */}
-                  <div className="text-center pt-2 border-t border-[#f1f2f4]">
-                    <span className="text-[10px] text-[#8c9196] block mb-1">
-                      Delivered automatically on behalf of{" "}
-                      <strong>{displayBrand}</strong> via RestockPing
+              {previewTab === "email" ? (
+                /* Customer Email Preview */
+                <div
+                  className={`w-full transition-all duration-300 flex justify-center ${
+                    previewMode === "mobile"
+                      ? "max-w-[340px] p-2.5 bg-slate-900 rounded-[32px] shadow-xl border-4 border-slate-700"
+                      : "max-w-[500px]"
+                  }`}
+                >
+                  <div className="w-full bg-white border border-[#e1e3e5] rounded-lg p-5 shadow-xs space-y-3.5">
+                    {previewMode === "mobile" && (
+                      <div className="w-16 h-1 bg-slate-300 rounded-full mx-auto -mt-2 mb-2" />
+                    )}
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#e3f1df] text-[#008060] text-[10px] font-semibold uppercase rounded">
+                      ● Restock Notice
                     </span>
-                    <span className="text-[9px] text-[#9ca3af] underline cursor-pointer">
-                      Unsubscribe from this restock notification
-                    </span>
+                    <h3 className="text-base font-bold text-[#202223] leading-snug break-words">
+                      {formState.emailHeadline || "Your item is back in stock"}
+                    </h3>
+                    <p className="text-xs text-[#6d7175] leading-relaxed break-words">
+                      {formState.emailBodyText ||
+                        "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
+                    </p>
+
+                    {/* Clean Product Row with Aspect-Ratio Preserving Container */}
+                    <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
+                      <div className="w-14 h-18 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                        {previewItem.imageUrl ? (
+                          <img
+                            src={previewItem.imageUrl}
+                            alt={previewItem.productTitle}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        ) : (
+                          <div className="text-[10px] text-slate-400 font-medium text-center leading-tight">
+                            In Stock
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-semibold text-[#111827] block truncate">
+                          {previewItem.productTitle}
+                        </span>
+                        <span className="text-[11px] text-[#6b7280]">
+                          {previewItem.variantTitle} · <strong className="text-[#111827]">${previewItem.price.toFixed(2)}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{ backgroundColor: formState.accentColor || "#008060" }}
+                      className="w-full py-2.5 text-xs font-semibold text-white text-center rounded-md cursor-default shadow-xs transition-colors"
+                    >
+                      {formState.emailButtonText || "Claim in 1-Click Checkout →"}
+                    </div>
+                    {formState.incentiveDiscountCode && (
+                      <div className="text-[11px] font-medium text-center text-[#008060] bg-[#e3f1df] py-1 px-2 rounded -mt-1">
+                        Code <strong>{formState.incentiveDiscountCode}</strong> automatically applied at checkout!
+                      </div>
+                    )}
+                    <div className="text-[10px] text-center text-[#8c9196] -mt-1">
+                      Inventory is reserved on a first-come, first-served basis.
+                    </div>
+
+                    {/* Compliance Footer with Unsubscribe link */}
+                    <div className="text-center pt-2 border-t border-[#f1f2f4]">
+                      <span className="text-[10px] text-[#8c9196] block mb-1">
+                        Delivered automatically on behalf of{" "}
+                        <strong>{displayBrand}</strong> via RestockPing
+                      </span>
+                      <span className="text-[9px] text-[#9ca3af] underline cursor-pointer">
+                        Unsubscribe from this restock notification
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* Storefront Dawn Theme PDP Card Preview */
+                <div className="w-full max-w-[480px] bg-white border border-[#e1e3e5] rounded-xl p-5 shadow-xs space-y-4">
+                  {/* Dawn Mock Header */}
+                  <div className="border-b border-[#f1f2f4] pb-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6d7175]">
+                      {displayBrand}
+                    </span>
+                    <h3 className="text-base font-bold text-[#111827] mt-0.5">
+                      {previewItem.productTitle}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-sm font-semibold text-[#111827]">
+                        ${previewItem.price.toFixed(2)}
+                      </span>
+                      <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded uppercase">
+                        Sold Out
+                      </span>
+                      <span className="text-[11px] text-[#6b7280]">
+                        · {previewItem.variantTitle}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* RestockPing Native Theme App Block */}
+                  <div className="border border-[#e5e7eb] rounded-lg p-4 bg-[#fbfcfd] space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        style={{ backgroundColor: formState.accentColor || "#008060" }}
+                        className="w-2.5 h-2.5 rounded-full inline-block shrink-0"
+                      />
+                      <span className="text-xs font-semibold text-[#111827]">
+                        Sold out? Get notified when back in stock
+                      </span>
+                    </div>
+
+                    {simulatedPDPState === "idle" ? (
+                      <div className="space-y-2">
+                        <input
+                          type="email"
+                          disabled
+                          placeholder="Enter your email address"
+                          className="w-full px-3 py-2 text-xs bg-white border border-[#d2d5d8] rounded text-[#8c9196] cursor-not-allowed"
+                        />
+                        <button
+                          type="button"
+                          style={{
+                            backgroundColor: formState.accentColor || "#008060",
+                            borderRadius: `${formState.storefrontButtonRadius ?? 6}px`,
+                          }}
+                          className="w-full py-2.5 px-4 text-xs font-semibold text-white text-center cursor-default shadow-xs transition-all"
+                        >
+                          {formState.storefrontButtonText || "Notify Me When Available"}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-[#e3f1df] border border-[#aee9d1] rounded-md text-xs text-[#008060] font-medium flex items-center gap-2">
+                        <span className="font-bold text-sm">✓</span>
+                        <span>{formState.storefrontSuccessMessage || "You're on the waitlist! We'll email you the moment stock returns."}</span>
+                      </div>
+                    )}
+
+                    {/* Simulation Switcher */}
+                    <div className="pt-2 border-t border-[#f1f2f4] flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSimulatedPDPState((s) => (s === "idle" ? "subscribed" : "idle"))
+                        }
+                        className="text-[11px] text-[#005bd3] hover:underline cursor-pointer font-medium"
+                      >
+                        {simulatedPDPState === "idle"
+                          ? "Simulate customer signup →"
+                          : "← Reset to default button"}
+                      </button>
+                      <span className="text-[10px] text-[#8c9196]">
+                        Pre-allocated layout box
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

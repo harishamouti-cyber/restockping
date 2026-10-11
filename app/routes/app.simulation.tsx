@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit, useActionData } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { getLiveProductMedia } from "../services/catalog.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -64,7 +65,53 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent === "CREATE_SAMPLE_SUBSCRIBERS") {
+    try {
+      const media = await getLiveProductMedia(admin);
+      const productTitle = media?.productTitle || "The Out of Stock Snowboard";
+      const variantTitle = media?.variantTitle || "Standard Edition";
+      const variantId = media?.variantId || "gid://shopify/ProductVariant/sample_snowboard";
+      const productId = media?.productId || "gid://shopify/Product/sample_snowboard";
+      const price = media?.price || 885.95;
+      const imageUrl = media?.imageUrl || "";
+
+      const sampleShoppers = [
+        `alex_${Math.floor(100 + Math.random() * 900)}@example.com`,
+        `morgan_${Math.floor(100 + Math.random() * 900)}@example.com`,
+        `taylor_${Math.floor(100 + Math.random() * 900)}@example.com`,
+      ];
+
+      for (const email of sampleShoppers) {
+        await db.restockSubscription.create({
+          data: {
+            shop: session.shop,
+            productId,
+            variantId,
+            inventoryItemId: "inv_sample_01",
+            productTitle,
+            variantTitle,
+            priceSnapshot: price,
+            customerEmail: email,
+            productImageUrl: imageUrl || undefined,
+            status: "PENDING",
+          },
+        });
+      }
+
+      return json({
+        success: true,
+        sampleCreated: true,
+        message: "Created 3 sample waitlist shoppers for testing!",
+      });
+    } catch (err: any) {
+      return json({ success: false, error: err.message }, { status: 400 });
+    }
+  }
+
   const units = parseInt(String(formData.get("units") || "4"), 10);
   const multiplier = parseFloat(String(formData.get("multiplier") || "2.5"));
   const waitingCount = parseInt(String(formData.get("waitingCount") || "0"), 10);
@@ -105,6 +152,22 @@ export default function AlertSimulator() {
   const theoreticalCapacity = Math.round(units * multiplier);
   const effectiveBatch = Math.min(theoreticalCapacity, waitingShoppers);
 
+  const showToast = (message: string, isError = false) => {
+    try {
+      if (typeof window !== "undefined" && (window as any).shopify?.toast?.show) {
+        (window as any).shopify.toast.show(message, isError ? { isError: true } : undefined);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (actionData?.success && (actionData as any).message) {
+      showToast((actionData as any).message);
+    } else if (actionData && !(actionData as any).success && (actionData as any).error) {
+      showToast((actionData as any).error, true);
+    }
+  }, [actionData]);
+
   const handleRunSimulation = () => {
     submit(
       {
@@ -116,9 +179,17 @@ export default function AlertSimulator() {
     );
   };
 
+  const handleCreateSampleShoppers = () => {
+    submit({ intent: "CREATE_SAMPLE_SUBSCRIBERS" }, { method: "POST" });
+  };
+
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-16 font-sans text-[#202223] antialiased">
-      <ui-title-bar title="Alert Simulator" />
+      <ui-title-bar title="Alert Simulator">
+        <button onClick={handleCreateSampleShoppers}>
+          Create 3 Sample Shoppers
+        </button>
+      </ui-title-bar>
 
       <main className="max-w-[960px] mx-auto px-4 py-4 space-y-3">
         {/* Main Test Run Card */}
@@ -168,12 +239,24 @@ export default function AlertSimulator() {
                   ))}
                 </select>
               ) : (
-                <input
-                  type="text"
-                  disabled
-                  value="All products currently in stock (0 waiting)"
-                  className="w-full px-3 py-1.5 text-xs bg-[#f6f6f7] border border-[#d2d5d8] rounded-md text-[#616161]"
-                />
+                <div>
+                  <input
+                    type="text"
+                    disabled
+                    value="All products currently in stock (0 waiting)"
+                    className="w-full px-3 py-1.5 text-xs bg-[#f6f6f7] border border-[#d2d5d8] rounded-md text-[#616161]"
+                  />
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[11px] text-[#616161]">No customer waitlist records yet.</span>
+                    <button
+                      type="button"
+                      onClick={handleCreateSampleShoppers}
+                      className="text-xs font-medium text-[#008060] bg-[#e3f1df] hover:bg-[#c1e5ba] px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      + Add 3 Sample Shoppers
+                    </button>
+                  </div>
+                </div>
               )}
               <span className="text-[11px] text-[#8c9196] mt-1 block">
                 Shoppers waiting to be notified:{" "}

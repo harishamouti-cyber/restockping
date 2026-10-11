@@ -177,6 +177,7 @@ export async function processInventoryRestock({
         bodyText: settings.emailBodyText,
         buttonText: settings.emailButtonText,
         accentColor: settings.accentColor,
+        discountCode: settings.incentiveDiscountCode || undefined,
         subscriptionId: sub.id,
       });
 

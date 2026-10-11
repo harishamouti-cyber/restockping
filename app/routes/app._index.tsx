@@ -110,6 +110,36 @@ export default function RestockOverview() {
     openThemeEditor(shop);
   };
 
+  const [showSetupGuide, setShowSetupGuide] = React.useState(true);
+
+  React.useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem("restockping_setup_guide_dismissed");
+      if (dismissed === "true") {
+        setShowSetupGuide(false);
+      }
+    } catch {}
+  }, []);
+
+  const handleDismissSetup = () => {
+    setShowSetupGuide(false);
+    try {
+      localStorage.setItem("restockping_setup_guide_dismissed", "true");
+    } catch {}
+  };
+
+  const handleReopenSetup = () => {
+    setShowSetupGuide(true);
+    try {
+      localStorage.removeItem("restockping_setup_guide_dismissed");
+    } catch {}
+  };
+
+  const isStep1Done = metrics.totalRegistered > 0;
+  const isStep2Done = Boolean(settings?.storeDisplayName || (settings as any)?.incentiveDiscountCode);
+  const isStep3Done = metrics.dispatchedCount > 0;
+  const completedSteps = [isStep1Done, isStep2Done, isStep3Done].filter(Boolean).length;
+
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-16 font-sans text-[#202223] antialiased">
       <ui-title-bar title="Restock Overview">
@@ -133,6 +163,14 @@ export default function RestockOverview() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {!showSetupGuide && (
+              <button
+                onClick={handleReopenSetup}
+                className="px-2.5 py-1 text-xs font-medium text-[#005bd3] hover:bg-[#f6f6f7] border border-[#d2d5d8] rounded-md transition-colors cursor-pointer"
+              >
+                Setup guide
+              </button>
+            )}
             <button
               onClick={() => navigate("/app/subscribers?status=DISPATCHED")}
               className="px-2.5 py-1 text-xs font-medium text-[#202223] hover:bg-[#f6f6f7] border border-[#d2d5d8] rounded-md transition-colors cursor-pointer"
@@ -148,36 +186,163 @@ export default function RestockOverview() {
           </div>
         </div>
 
-        {/* Actionable Theme Guidance when no subscribers exist yet */}
-        {metrics.totalRegistered === 0 && (
-          <div className="bg-[#f0f7ff] border border-[#b4dbff] rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
-            <div className="flex items-center gap-2.5">
-              <div className="text-[#005bd3]">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+        {/* Interactive 3-Step Merchant Setup Guide */}
+        {showSetupGuide && (
+          <div className="bg-white border border-[#e1e3e5] rounded-xl p-4 shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f1f2f4] pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-full bg-[#e3f1df] text-[#008060] flex items-center justify-center text-xs font-bold shrink-0">
+                  ⚡
+                </span>
+                <div>
+                  <h3 className="text-xs font-semibold text-[#202223]">
+                    Quick Start Setup Guide
+                  </h3>
+                  <span className="text-[11px] text-[#616161]">
+                    Complete 3 simple steps to start converting out-of-stock shoppers into revenue.
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="text-xs font-semibold text-[#002b66] block">
-                  Add the Back in Stock button to your product page template
-                </span>
-                <span className="text-[11px] text-[#2c4e75]">
-                  Enable the RestockPing app block in the Theme Editor so customers can sign up when items sell out.
-                </span>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-24 h-1.5 bg-[#f1f2f4] rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(15, Math.round((completedSteps / 3) * 100))}%` }}
+                      className="h-full bg-[#008060] transition-all duration-300"
+                    />
+                  </div>
+                  <span className="text-[11px] font-medium text-[#616161]">
+                    {completedSteps} of 3 completed
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDismissSetup}
+                  className="text-xs text-[#8c9196] hover:text-[#202223] px-1 py-0.5 rounded cursor-pointer"
+                  title="Dismiss guide"
+                >
+                  ✕
+                </button>
               </div>
             </div>
-            <a
-              href={themeEditorUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => {
-                e.preventDefault();
-                openThemeEditor(shop);
-              }}
-              className="px-3 py-1 text-xs font-medium text-[#002b66] bg-white border border-[#b4dbff] rounded-md hover:bg-[#e0f0ff] transition-colors shrink-0 shadow-2xs cursor-pointer inline-flex items-center no-underline"
-            >
-              Open theme editor →
-            </a>
+
+            {/* 3 Steps Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Step 1 */}
+              <div className={`p-3 rounded-lg border transition-all flex flex-col justify-between ${
+                isStep1Done ? "bg-[#fbfcfd] border-[#e1e3e5]" : "bg-[#f0f7ff] border-[#b4dbff]"
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+                      Step 1
+                    </span>
+                    {isStep1Done ? (
+                      <span className="text-[10px] font-semibold text-[#008060] bg-[#e3f1df] px-1.5 py-0.5 rounded">
+                        ✓ Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-[#002b66] bg-[#dbeafe] px-1.5 py-0.5 rounded">
+                        Action required
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-xs font-semibold text-[#202223] mb-1">
+                    Add button to theme
+                  </h4>
+                  <p className="text-[11px] text-[#616161] leading-relaxed">
+                    Enable the RestockPing app block on product templates in Shopify Theme Editor.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <a
+                    href={themeEditorUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleThemeDeepLink();
+                    }}
+                    className="w-full text-center px-2.5 py-1 text-xs font-medium text-[#002b66] bg-white border border-[#b4dbff] rounded-md hover:bg-[#e0f0ff] transition-colors inline-block cursor-pointer shadow-2xs no-underline"
+                  >
+                    Open theme editor →
+                  </a>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className={`p-3 rounded-lg border transition-all flex flex-col justify-between ${
+                isStep2Done ? "bg-[#fbfcfd] border-[#e1e3e5]" : "bg-white border-[#e1e3e5]"
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+                      Step 2
+                    </span>
+                    {isStep2Done ? (
+                      <span className="text-[10px] font-semibold text-[#008060] bg-[#e3f1df] px-1.5 py-0.5 rounded">
+                        ✓ Configured
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-[#616161] bg-[#f1f2f4] px-1.5 py-0.5 rounded">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-xs font-semibold text-[#202223] mb-1">
+                    Brand email & discounts
+                  </h4>
+                  <p className="text-[11px] text-[#616161] leading-relaxed">
+                    Customize your sender brand and add an auto-applied checkout discount code.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <button
+                    onClick={() => navigate("/app/settings")}
+                    className="w-full px-2.5 py-1 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded-md hover:bg-[#f6f6f7] transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Configure settings →
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className={`p-3 rounded-lg border transition-all flex flex-col justify-between ${
+                isStep3Done ? "bg-[#fbfcfd] border-[#e1e3e5]" : "bg-white border-[#e1e3e5]"
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+                      Step 3
+                    </span>
+                    {isStep3Done ? (
+                      <span className="text-[10px] font-semibold text-[#008060] bg-[#e3f1df] px-1.5 py-0.5 rounded">
+                        ✓ Verified
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-[#616161] bg-[#f1f2f4] px-1.5 py-0.5 rounded">
+                        Verification
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-xs font-semibold text-[#202223] mb-1">
+                    Send test alert email
+                  </h4>
+                  <p className="text-[11px] text-[#616161] leading-relaxed">
+                    Verify transactional deliverability with real product photos to your inbox.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <button
+                    onClick={() => navigate("/app/settings")}
+                    className="w-full px-2.5 py-1 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded-md hover:bg-[#f6f6f7] transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Send test email →
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

@@ -7,12 +7,14 @@ import { sendRestockNotificationEmail } from "../services/email.server";
 import { getLiveProductMedia, getVariantProductMedia } from "../services/catalog.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
+import { generateCartPermalink } from "../utils/permalink";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const statusParam = url.searchParams.get("status") || "ALL";
   const queryParam = url.searchParams.get("q") || "";
+  const isExport = url.searchParams.get("export") === "csv";
 
   try {
     const whereClause: any = { shop: session.shop };
@@ -25,7 +27,58 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ];
     }
 
-    const [subscribers, totalCount, pendingCount, dispatchedCount, convertedCount] = await Promise.all([
+    // Direct Supplier Demand CSV Export
+    if (isExport) {
+      const exportSubs = await db.restockSubscription.findMany({
+        where: whereClause,
+        orderBy: { createdAt: "desc" },
+      });
+
+      const escapeCsvCell = (val: unknown): string => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      const headers = [
+        "Customer Email",
+        "Product Title",
+        "Variant Title",
+        "Variant ID",
+        "Unit Price",
+        "Status",
+        "Date Registered",
+        "Dispatched At",
+        "Converted At",
+      ];
+
+      const csvRows = exportSubs.map((s) => [
+        escapeCsvCell(s.customerEmail || "Anonymous"),
+        escapeCsvCell(s.productTitle),
+        escapeCsvCell(s.variantTitle),
+        escapeCsvCell(s.variantId),
+        escapeCsvCell(s.priceSnapshot),
+        escapeCsvCell(s.status),
+        escapeCsvCell(s.createdAt ? new Date(s.createdAt).toISOString() : ""),
+        escapeCsvCell(s.dispatchedAt ? new Date(s.dispatchedAt).toISOString() : ""),
+        escapeCsvCell(s.convertedAt ? new Date(s.convertedAt).toISOString() : ""),
+      ].join(","));
+
+      const csvContent = [headers.join(","), ...csvRows].join("\r\n");
+      const dateTag = new Date().toISOString().slice(0, 10);
+      const storeHandle = session.shop.replace(".myshopify.com", "");
+
+      return new Response(csvContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="restockping-demand-${storeHandle}-${dateTag}.csv"`,
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      });
+    }
+
+    const [subscribers, totalCount, pendingCount, dispatchedCount, convertedCount, settings] = await Promise.all([
       db.restockSubscription.findMany({
         where: whereClause,
         orderBy: { createdAt: "desc" },
@@ -44,6 +97,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           status: "CONVERTED",
         },
       }),
+      db.restockSettings.findUnique({ where: { shop: session.shop } }),
     ]);
 
     return json({
@@ -52,6 +106,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       pendingCount: pendingCount || 0,
       dispatchedCount: dispatchedCount || 0,
       convertedCount: convertedCount || 0,
+      incentiveDiscountCode: settings?.incentiveDiscountCode || null,
       statusParam,
       queryParam,
       shop: session.shop,
@@ -64,6 +119,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       pendingCount: 0,
       dispatchedCount: 0,
       convertedCount: 0,
+      incentiveDiscountCode: null,
       statusParam,
       queryParam,
       shop: session.shop,
@@ -133,6 +189,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         bodyText: settings?.emailBodyText,
         buttonText: settings?.emailButtonText,
         accentColor: settings?.accentColor,
+        discountCode: settings?.incentiveDiscountCode || undefined,
         subscriptionId: subscriber.id,
       });
 
@@ -189,6 +246,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           bodyText: settings?.emailBodyText,
           buttonText: settings?.emailButtonText,
           accentColor: settings?.accentColor,
+          discountCode: settings?.incentiveDiscountCode || undefined,
           subscriptionId: sub.id,
         });
 
@@ -223,6 +281,7 @@ export default function SubscribersPage() {
     pendingCount,
     dispatchedCount,
     convertedCount,
+    incentiveDiscountCode,
     statusParam,
     queryParam,
     shop,
@@ -276,6 +335,22 @@ export default function SubscribersPage() {
     setSearchParams(next);
   };
 
+  const handleExportCsv = () => {
+    const next = new URLSearchParams(searchParams);
+    next.set("export", "csv");
+    const exportUrl = `/app/subscribers?${next.toString()}`;
+    const link = document.createElement("a");
+    link.href = exportUrl;
+    link.setAttribute(
+      "download",
+      `restockping-demand-${shop.replace(".myshopify.com", "")}-${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Downloading Supplier Demand CSV...");
+  };
+
   const handleBulkDelete = (ids: string[]) => {
     submit(
       { intent: "BULK_DELETE", ids: JSON.stringify(ids) },
@@ -297,10 +372,12 @@ export default function SubscribersPage() {
   };
 
   const handleCopyPermalink = (sub: any) => {
-    const cleanVariantId = String(sub.variantId || "").replace(/\D/g, "");
-    const url = `https://${shop}/cart/${cleanVariantId}:1?checkout[email]=${encodeURIComponent(
-      sub.customerEmail || ""
-    )}`;
+    const url = generateCartPermalink({
+      shop,
+      variantId: sub.variantId,
+      customerEmail: sub.customerEmail,
+      discountCode: incentiveDiscountCode || undefined,
+    });
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
     }
@@ -317,6 +394,9 @@ export default function SubscribersPage() {
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-16 font-sans text-[#202223] antialiased">
       <ui-title-bar title="Waitlist Subscribers">
+        <button variant="primary" onClick={handleExportCsv}>
+          Export CSV
+        </button>
         <button onClick={() => openThemeEditor(shop)}>
           View in theme
         </button>
@@ -383,45 +463,58 @@ export default function SubscribersPage() {
               ))}
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full sm:w-72">
-              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8c9196]">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search customers or products..."
-                className="w-full pl-8 pr-7 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all placeholder-[#8c9196]"
-              />
-              {searchValue && (
-                <button
-                  onClick={() => handleSearchChange("")}
-                  className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8c9196] hover:text-[#202223] cursor-pointer"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            {/* Search Input & Quick Export Button */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8c9196]">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                </button>
-              )}
+                </div>
+                <input
+                  type="text"
+                  value={searchValue}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search customers or products..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs text-[#202223] bg-white border border-[#c9cccf] rounded-md focus:border-[#005bd3] focus:ring-1 focus:ring-[#005bd3] outline-none transition-all placeholder-[#8c9196]"
+                />
+                {searchValue && (
+                  <button
+                    onClick={() => handleSearchChange("")}
+                    className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8c9196] hover:text-[#202223] cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={handleExportCsv}
+                title="Download Supplier Demand CSV"
+                className="px-2.5 py-1.5 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded-md hover:bg-[#f6f6f7] transition-colors cursor-pointer shrink-0 inline-flex items-center gap-1.5 shadow-2xs"
+              >
+                <svg className="w-3.5 h-3.5 text-[#616161]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Export CSV</span>
+              </button>
             </div>
           </div>
 
-          {/* Table or Empty State */}
+          {/* Table or Actionable Empty State */}
           {subscribers.length === 0 ? (
             <div className="py-12 px-4 text-center flex flex-col items-center justify-center bg-white">
-              <div className="w-10 h-10 rounded-full bg-[#f1f2f4] flex items-center justify-center text-[#8c9196] mb-2.5">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <div className="w-12 h-12 rounded-full bg-[#f1f2f4] flex items-center justify-center text-[#8c9196] mb-3">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
                 </svg>
               </div>
               {queryParam || statusParam !== "ALL" ? (
                 <>
-                  <h3 className="text-xs font-semibold text-[#202223]">No customers match your filters</h3>
-                  <p className="text-[11px] text-[#8c9196] max-w-sm mt-0.5 leading-normal">
+                  <h3 className="text-sm font-semibold text-[#202223]">No customers match your filters</h3>
+                  <p className="text-xs text-[#8c9196] max-w-sm mt-1 leading-normal">
                     Try searching with different keywords or switch status tabs.
                   </p>
                   <button
@@ -433,10 +526,24 @@ export default function SubscribersPage() {
                 </>
               ) : (
                 <>
-                  <h3 className="text-xs font-semibold text-[#202223]">No waitlist customers yet</h3>
-                  <p className="text-[11px] text-[#8c9196] max-w-sm mt-0.5 leading-normal">
-                    Customer restock requests will appear here once visitors sign up for sold-out items on your live store.
+                  <h3 className="text-sm font-semibold text-[#202223]">No waitlist customers yet</h3>
+                  <p className="text-xs text-[#616161] max-w-sm mt-1 leading-normal">
+                    Customer restock requests will appear here once visitors sign up for sold-out items on your storefront.
                   </p>
+                  <div className="flex items-center gap-2.5 mt-4">
+                    <button
+                      onClick={() => openThemeEditor(shop)}
+                      className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors cursor-pointer shadow-xs"
+                    >
+                      Add button to theme
+                    </button>
+                    <button
+                      onClick={() => navigate("/app/simulation")}
+                      className="px-3 py-1.5 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded-md hover:bg-[#f6f6f7] transition-colors cursor-pointer"
+                    >
+                      Simulate alert
+                    </button>
+                  </div>
                 </>
               )}
             </div>
