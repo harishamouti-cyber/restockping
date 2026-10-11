@@ -17,83 +17,14 @@ async function generateAssets() {
   const page = await context.newPage();
 
   // 1. MASTER APP ICON (1200 x 1200, Square PNG, 30% safe zone, No pre-rounded corners)
-  console.log("Rendering 1200x1200 Master App Icon...");
-  await page.setViewportSize({ width: 1200, height: 1200 });
-  const iconHtml = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body {
-            width: 1200px;
-            height: 1200px;
-            background: linear-gradient(135deg, #09090b 0%, #18181b 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          }
-          .icon-container {
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle at 30% 30%, #008060 0%, #004c3f 100%);
-            border-radius: 120px;
-            box-shadow: 0 40px 100px rgba(0, 128, 96, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-          }
-          .pulse-ring {
-            position: absolute;
-            width: 720px;
-            height: 720px;
-            border: 4px solid rgba(0, 128, 96, 0.25);
-            border-radius: 180px;
-          }
-          .ping-badge {
-            position: absolute;
-            top: 60px;
-            right: 60px;
-            width: 56px;
-            height: 56px;
-            background: #ea580c;
-            border-radius: 50%;
-            border: 8px solid #ffffff;
-            box-shadow: 0 8px 24px rgba(234, 88, 12, 0.5);
-          }
-          svg {
-            width: 280px;
-            height: 280px;
-            fill: #ffffff;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
-          }
-          .brand-label {
-            margin-top: 18px;
-            font-size: 42px;
-            font-weight: 800;
-            color: #ffffff;
-            letter-spacing: -1px;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          }
-        </style>
-      </head>
-      <body>
-        <div class="pulse-ring"></div>
-        <div class="icon-container">
-          <div class="ping-badge"></div>
-          <svg viewBox="0 0 24 24">
-            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
-          </svg>
-          <div class="brand-label">RESTOCKPING</div>
-        </div>
-      </body>
-    </html>
-  `;
-  await page.setContent(iconHtml);
-  await page.screenshot({ path: path.join(outputDir, "app_icon_1200x1200.png") });
+  console.log("Loading 1200x1200 Official Master App Icon...");
+  const officialMasterIconPath = path.resolve(process.cwd(), "public/listing/app-icon-1200x1200.png");
+  if (fs.existsSync(officialMasterIconPath)) {
+    fs.copyFileSync(officialMasterIconPath, path.join(outputDir, "app_icon_1200x1200.png"));
+    console.log("✓ Copied finalized Master App Icon to app-store-assets/app_icon_1200x1200.png");
+  } else {
+    console.warn("Notice: public/listing/app-icon-1200x1200.png not found, run scripts/generate_official_icons.py first.");
+  }
 
   // 2. KEY VISUAL / HERO BANNER (1600 x 900, 16:9, Dark Graphite Linear Aesthetic)
   console.log("Rendering 1600x900 Key Visual / Hero Banner...");

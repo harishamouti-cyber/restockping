@@ -46,6 +46,7 @@ export default function App() {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="alternate icon" type="image/png" href="/favicon.png" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
         {/* Shopify App Bridge v4 tag */}
         <script

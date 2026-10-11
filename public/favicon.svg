@@ -1,0 +1,36 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded Squircle Background -->
+  <rect width="256" height="256" rx="58" fill="#1B4A3A"/>
+
+  <!-- Scaled RestockPing Symbol -->
+  <g transform="translate(12, 10) scale(0.21)">
+    <!-- Radar Signal Waves (Mint Green: #8AE0BD) -->
+    <path d="M720 380 C 720 340, 750 310, 790 310" stroke="#8AE0BD" stroke-width="28" stroke-linecap="round" fill="none"/>
+    <path d="M720 440 C 720 420, 735 405, 755 405" stroke="#8AE0BD" stroke-width="28" stroke-linecap="round" fill="none"/>
+    <path d="M720 320 C 720 260, 770 210, 830 210" stroke="#8AE0BD" stroke-width="28" stroke-linecap="round" fill="none"/>
+
+    <!-- Package Linework (Pure White: #FFFFFF) -->
+    <!-- Open Left Flap -->
+    <polygon points="350,420 500,340 580,390 430,470" fill="#FFFFFF" fill-opacity="0.95" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round"/>
+    
+    <!-- Item inside box -->
+    <path d="M500,475 L540,445 L585,465 L545,495 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M545,495 L545,540 L585,510 L585,465 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M500,475 L500,520 L545,540 L545,495 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
+
+    <!-- Open Front/Right Flap -->
+    <polygon points="580,590 730,505 810,545 660,630" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linejoin="round" stroke-linecap="round"/>
+
+    <!-- Main Box Front Edges (Isometric) -->
+    <!-- Top rim -->
+    <path d="M350,545 L505,630 L660,545" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- Left vertical -->
+    <path d="M410,580 L410,735" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+    <!-- Center vertical -->
+    <path d="M600,685 L600,840" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+    <!-- Right vertical -->
+    <path d="M785,580 L785,735" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+    <!-- Bottom V base -->
+    <path d="M410,735 L600,840 L785,735" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</svg>
