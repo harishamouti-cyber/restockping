@@ -4,7 +4,7 @@ import { useLoaderData, useSubmit, useSearchParams, useNavigate, useActionData }
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
-import { getVariantProductMedia } from "../services/catalog.server";
+import { getLiveProductMedia, getVariantProductMedia } from "../services/catalog.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
 
@@ -81,8 +81,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const resolveImageUrl = async (variantId: string, existingUrl?: string | null) => {
     if (existingUrl && existingUrl.startsWith("http")) return existingUrl;
     try {
-      const media = await getVariantProductMedia(admin, variantId);
-      return media.imageUrl || existingUrl || null;
+      const media = await getLiveProductMedia(admin, variantId);
+      return media?.imageUrl || existingUrl || null;
     } catch (err) {
       console.error("[Catalog Media Fetch Error]:", err);
       return existingUrl || null;
@@ -111,8 +111,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       let imageUrl = subscriber.productImageUrl;
       if (!imageUrl) {
         try {
-          const media = await getVariantProductMedia(admin, subscriber.variantId);
-          imageUrl = media.imageUrl || null;
+          const media = await getLiveProductMedia(admin, subscriber.variantId);
+          imageUrl = media?.imageUrl || null;
         } catch (err) {
           console.error("[Catalog Media Fetch Error]:", err);
         }
@@ -167,8 +167,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         let imageUrl = sub.productImageUrl;
         if (!imageUrl) {
           try {
-            const media = await getVariantProductMedia(admin, sub.variantId);
-            imageUrl = media.imageUrl || null;
+            const media = await getLiveProductMedia(admin, sub.variantId);
+            imageUrl = media?.imageUrl || null;
           } catch (err) {
             console.error("[Catalog Media Fetch Error]:", err);
           }

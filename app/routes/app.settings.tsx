@@ -4,16 +4,16 @@ import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
-import { getFirstOutOfStockProduct } from "../services/catalog.server";
+import { getLiveProductMedia } from "../services/catalog.server";
 import { sanitizeShopBrandName } from "../utils/brand";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [settingsRecord, sampleProduct] = await Promise.all([
+  const [settingsRecord, liveProduct] = await Promise.all([
     db.restockSettings.findUnique({ where: { shop } }),
-    getFirstOutOfStockProduct(admin),
+    getLiveProductMedia(admin),
   ]);
 
   const sanitizedDefault = sanitizeShopBrandName(shop);
@@ -33,7 +33,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storefrontButtonRadius: 6,
   };
 
-  const previewItem = sampleProduct || {
+  const previewItem = liveProduct || {
     productId: "sample_p1",
     variantId: "gid://shopify/ProductVariant/123456789",
     productTitle: "The Out of Stock Snowboard",
@@ -592,15 +592,19 @@ export default function Settings() {
 
                   {/* Clean Product Row with Aspect-Ratio Preserving Container */}
                   <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                    {previewItem.imageUrl ? (
-                      <div className="w-14 h-18 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                    <div className="w-14 h-18 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                      {previewItem.imageUrl ? (
                         <img
                           src={previewItem.imageUrl}
                           alt={previewItem.productTitle}
                           className="max-w-full max-h-full object-contain"
                         />
-                      </div>
-                    ) : null}
+                      ) : (
+                        <div className="text-[10px] text-slate-400 font-medium text-center leading-tight">
+                          In Stock
+                        </div>
+                      )}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <span className="text-xs font-semibold text-[#111827] block truncate">
                         {previewItem.productTitle}

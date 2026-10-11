@@ -90,7 +90,7 @@
               email: email,
               productId: root.dataset.productId || '',
               productTitle: root.dataset.productTitle || '',
-              productImageUrl: root.dataset.productImage || '',
+              productImageUrl: (root.querySelector('input[name="productImageUrl"]')?.value) || root.dataset.productImage || '',
               variantId: root.dataset.selectedVariantId || '',
               variantTitle: root.dataset.selectedVariantTitle || '',
               price: root.dataset.selectedVariantPrice || '0.0',

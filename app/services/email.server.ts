@@ -1,6 +1,4 @@
 import nodemailer from "nodemailer";
-import { sanitizeShopBrandName } from "../utils/brand";
-export { sanitizeShopBrandName };
 
 export interface SendEmailParams {
   to: string;
@@ -26,6 +24,14 @@ export interface SendEmailParams {
 }
 
 export type SendRestockEmailOptions = SendEmailParams;
+
+export function sanitizeShopBrandName(shop: string, explicitName?: string): string {
+  if (explicitName && explicitName.trim().length > 0) {
+    return explicitName.trim();
+  }
+  const clean = shop.replace(".myshopify.com", "").replace(/-[a-z0-9]{8,}$/i, "");
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
 
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 465;
@@ -67,128 +73,7 @@ export function getTransporter() {
   return transporter;
 }
 
-export function generateRestockEmailHtml(params: {
-  productTitle: string;
-  variantTitle: string;
-  price: number;
-  checkoutUrl: string;
-  unsubscribeUrl: string;
-  headline: string;
-  bodyText: string;
-  buttonText: string;
-  buttonColor: string;
-  productImageUrl?: string;
-  displayBrand: string;
-  subject: string;
-}) {
-  const {
-    productTitle,
-    variantTitle,
-    price,
-    checkoutUrl,
-    unsubscribeUrl,
-    headline,
-    bodyText,
-    buttonText,
-    buttonColor,
-    productImageUrl,
-    displayBrand,
-    subject,
-  } = params;
-
-  return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${subject}</title>
-      </head>
-      <body style="margin:0;padding:0;background-color:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-        <!-- Hidden Preheader for Gmail Snippet Optimization -->
-        <div style="display:none;font-size:1px;color:#f6f6f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-          ${headline} - Restocked at ${displayBrand}. Complete your order before items sell out.
-        </div>
-
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding:40px 15px;background-color:#f6f6f7;">
-          <tr>
-            <td align="center">
-              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:540px;background-color:#ffffff;border:1px solid #e1e3e5;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-                
-                <!-- Notice Badge & Headline -->
-                <tr>
-                  <td style="padding:32px 32px 16px 32px;">
-                    <div style="display:inline-block;padding:3px 8px;background-color:#e3f1df;border-radius:4px;font-size:11px;font-weight:600;color:#008060;text-transform:uppercase;letter-spacing:0.04em;">
-                      ● Restock Notice
-                    </div>
-                    <h1 style="margin:16px 0 8px 0;font-size:22px;font-weight:700;color:#202223;line-height:1.3;">
-                      ${headline}
-                    </h1>
-                    <p style="margin:0;font-size:14px;color:#6d7175;line-height:1.5;">
-                      ${bodyText}
-                    </p>
-                  </td>
-                </tr>
-
-                <!-- Product Box with Responsive Aspect-Ratio Image -->
-                <tr>
-                  <td style="padding:0 32px;">
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-                      <tr>
-                        ${
-                          productImageUrl && productImageUrl.startsWith("http")
-                            ? `<td width="88" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:6px;">
-                                <img src="${productImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:92px;width:auto;height:auto;object-fit:contain;display:block;" />
-                              </td>`
-                            : ""
-                        }
-                        <td style="${productImageUrl && productImageUrl.startsWith("http") ? "padding-left:14px;" : ""}" valign="middle">
-                          <div style="font-size:14px;font-weight:600;color:#111827;">${productTitle}</div>
-                          <div style="font-size:12px;color:#6b7280;margin-top:2px;">
-                            ${variantTitle !== "Default Title" ? variantTitle : "Standard Edition"} · <strong style="color:#111827;">$${price.toFixed(2)}</strong>
-                          </div>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- CTA Button -->
-                <tr>
-                  <td style="padding:24px 32px 28px 32px;">
-                    <a href="${checkoutUrl}" target="_blank" style="display:block;width:100%;box-sizing:border-box;text-align:center;background-color:${buttonColor};color:#ffffff;padding:14px 20px;border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-                      ${buttonText}
-                    </a>
-                    <p style="margin:12px 0 0 0;font-size:11px;color:#8c9196;text-align:center;">
-                      Inventory is reserved on a first-come, first-served basis.
-                    </p>
-                  </td>
-                </tr>
-
-                <!-- Compliance Footer with CAN-SPAM Opt-Out -->
-                <tr>
-                  <td style="padding:16px 32px;background-color:#fafbfb;border-top:1px solid #f1f2f4;text-align:center;">
-                    <span style="font-size:11px;color:#8c9196;display:block;margin-bottom:4px;">
-                      Delivered automatically on behalf of <strong>${displayBrand}</strong> via RestockPing
-                    </span>
-                    <a href="${unsubscribeUrl}" target="_blank" style="font-size:10px;color:#9ca3af;text-decoration:underline;">
-                      Unsubscribe from this restock notification
-                    </a>
-                  </td>
-                </tr>
-
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-    </html>
-  `;
-}
-
 export async function sendRestockNotificationEmail(params: SendEmailParams) {
-  const { user, fromName } = getSmtpConfig();
-
   const {
     to,
     shop,
@@ -198,8 +83,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     price,
     variantId,
     productImageUrl,
-    senderName = fromName,
-    replyTo,
+    senderName = "Restock Alerts",
     headline = params.headlineText || params.headline || "Your item is back in stock",
     bodyText = params.bodyText || "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
     buttonText = params.buttonText || "Claim in 1-Click Checkout →",
@@ -207,12 +91,19 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     subjectTemplate = params.subjectTemplate || "Back in Stock: {{product_title}} is ready to ship",
     discountCode,
     subscriptionId,
+    replyTo,
   } = params;
+
+  const { user, pass } = getSmtpConfig();
+
+  if (!user || !pass) {
+    throw new Error("SMTP configuration missing in .env.");
+  }
 
   const mailClient = getTransporter();
 
   // Strip markdown brackets [url](url) if present
-  let cleanImageUrl = (productImageUrl || "")
+  const cleanImageUrl = (productImageUrl || "")
     .replace(/^\[.*?\]\((.*?)\)$/, "$1")
     .trim();
 
@@ -228,29 +119,99 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${price.toFixed(2)}`)
     .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
-  const html = generateRestockEmailHtml({
-    productTitle,
-    variantTitle,
-    price,
-    checkoutUrl,
-    unsubscribeUrl,
-    headline,
-    bodyText,
-    buttonText,
-    buttonColor,
-    productImageUrl: cleanImageUrl,
-    displayBrand,
-    subject,
-  });
+  const imageHtml = cleanImageUrl && cleanImageUrl.startsWith("http")
+    ? `<td width="88" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:6px;">
+         <img src="${cleanImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:96px;width:auto;height:auto;object-fit:contain;display:block;" />
+       </td>`
+    : `<td width="88" align="center" valign="middle" style="background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:12px;color:#9ca3af;font-size:11px;font-weight:500;">
+         In Stock
+       </td>`;
 
-  const info = await mailClient.sendMail({
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="margin:0;padding:0;background-color:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+        <!-- Preheader -->
+        <div style="display:none;font-size:1px;color:#f6f6f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+          ${headline} - Restocked at ${displayBrand}. Order before inventory runs out.
+        </div>
+
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding:40px 15px;background-color:#f6f6f7;">
+          <tr>
+            <td align="center">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:540px;background-color:#ffffff;border:1px solid #e1e3e5;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <tr>
+                  <td style="padding:32px 32px 16px 32px;">
+                    <div style="display:inline-block;padding:3px 8px;background-color:#e3f1df;border-radius:4px;font-size:11px;font-weight:600;color:#008060;text-transform:uppercase;letter-spacing:0.04em;">
+                      ● Restock Notice
+                    </div>
+                    <h1 style="margin:16px 0 8px 0;font-size:22px;font-weight:700;color:#202223;line-height:1.3;">
+                      ${headline}
+                    </h1>
+                    <p style="margin:0;font-size:14px;color:#6d7175;line-height:1.5;">
+                      ${bodyText}
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Product Box with Aspect-Ratio Containment -->
+                <tr>
+                  <td style="padding:0 32px;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
+                      <tr>
+                        ${imageHtml}
+                        <td style="padding-left:14px;" valign="middle">
+                          <div style="font-size:14px;font-weight:600;color:#111827;">${productTitle}</div>
+                          <div style="font-size:12px;color:#6b7280;margin-top:2px;">
+                            ${variantTitle !== "Default Title" ? variantTitle : "Standard Edition"} · <strong style="color:#111827;">$${price.toFixed(2)}</strong>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- CTA -->
+                <tr>
+                  <td style="padding:24px 32px 28px 32px;">
+                    <a href="${checkoutUrl}" target="_blank" style="display:block;width:100%;box-sizing:border-box;text-align:center;background-color:${buttonColor};color:#ffffff;padding:14px 20px;border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                      ${buttonText}
+                    </a>
+                    <p style="margin:12px 0 0 0;font-size:11px;color:#8c9196;text-align:center;">
+                      Inventory is reserved on a first-come, first-served basis.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer with CAN-SPAM Opt-Out -->
+                <tr>
+                  <td style="padding:16px 32px;background-color:#fafbfb;border-top:1px solid #f1f2f4;text-align:center;">
+                    <span style="font-size:11px;color:#8c9196;display:block;margin-bottom:4px;">
+                      Delivered automatically on behalf of <strong>${displayBrand}</strong> via RestockPing
+                    </span>
+                    <a href="${unsubscribeUrl}" target="_blank" style="font-size:10px;color:#9ca3af;text-decoration:underline;">
+                      Unsubscribe from this restock notification
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  return await mailClient.sendMail({
     from: `"${senderName}" <${user}>`,
     to,
     replyTo: replyTo || user,
     subject,
     html,
   });
-
-  console.log(`[SMTP Success] Delivered alert to ${to} (Message ID: ${info.messageId})`);
-  return info;
 }

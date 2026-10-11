@@ -1,0 +1,113 @@
+{% comment %}
+  RestockPing Native Notification Button & Trigger
+  Pre-allocated bounding box guarantees 0.00 Cumulative Layout Shift (CLS)
+  Captures featured product image directly at signup
+{% endcomment %}
+
+<div
+  class="restockping-wrapper"
+  data-restockping-root
+  data-product-id="{{ product.id }}"
+  data-product-title="{{ product.title | escape }}"
+  data-product-image="{{ product.featured_image | image_url: width: 300 }}"
+  data-selected-variant-id="{{ product.selected_or_first_available_variant.id }}"
+  data-selected-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
+  data-selected-variant-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-proxy-base="/apps/restockping"
+  data-accent-color="{{ block.settings.accent_color | default: '#008060' }}"
+  style="
+    min-height: 54px;
+    width: 100%;
+    margin: 1.5rem 0;
+    display: none;
+  "
+>
+  <div
+    class="restockping-card"
+    style="
+      width: 100%;
+      border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.12);
+      border-radius: var(--media-radius, 8px);
+      background-color: var(--gradient-background, #ffffff);
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03);
+      box-sizing: border-box;
+    "
+  >
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem;">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ block.settings.accent_color | default: '#008060' }}; display: inline-block;"></span>
+      <span style="font-size: 14px; font-weight: 600; color: rgb(var(--color-foreground, 18, 18, 18)); font-family: inherit;">
+        {{ block.settings.heading_text | default: "Sold out? Get notified when back in stock" }}
+      </span>
+    </div>
+
+    <form class="restockping-form" style="display: flex; flex-direction: column; width: 100%; gap: 10px;" onsubmit="return false;">
+      <input
+        type="hidden"
+        id="restock-product-image"
+        name="productImageUrl"
+        value="{{ product.featured_image | image_url: width: 300 }}"
+      />
+      <input
+        type="email"
+        name="restock_email"
+        placeholder="{{ block.settings.input_placeholder | default: 'Enter your email address' }}"
+        required
+        autocomplete="email"
+        style="
+          width: 100%;
+          min-height: 44px;
+          padding: 0 12px;
+          border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.2);
+          border-radius: var(--buttons-radius, 4px);
+          background: transparent;
+          color: rgb(var(--color-foreground, 18, 18, 18));
+          font-size: 14px;
+          outline: none;
+          box-sizing: border-box;
+          font-family: inherit;
+        "
+      />
+      <input type="text" name="b_identifier_hp" style="display:none !important;" tabindex="-1" autocomplete="off" />
+
+      <button
+        type="button"
+        data-restockping-submit
+        style="
+          width: 100%;
+          min-height: 46px;
+          padding: 0 20px;
+          background-color: {{ block.settings.accent_color | default: '#008060' }};
+          color: #ffffff;
+          border: none;
+          border-radius: var(--buttons-radius, 4px);
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          cursor: pointer;
+          transition: opacity 0.2s ease, transform 0.1s ease;
+          text-transform: var(--buttons-transform, uppercase);
+          font-family: inherit;
+        "
+      >
+        Notify Me When Available
+      </button>
+    </form>
+
+    <div class="restockping-feedback" style="display: none; font-size: 13px; margin-top: 10px; font-weight: 500; font-family: inherit;"></div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Restock Waitlist Trigger",
+  "target": "section",
+  "javascript": "restock_client.js",
+  "settings": [
+    { "type": "text", "id": "heading_text", "label": "Heading", "default": "Sold out? Get notified when back in stock" },
+    { "type": "text", "id": "input_placeholder", "label": "Input Placeholder", "default": "Enter your email address" },
+    { "type": "color", "id": "accent_color", "label": "Accent Color", "default": "#008060" }
+  ]
+}
+{% endschema %}

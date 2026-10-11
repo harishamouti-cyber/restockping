@@ -1,80 +1,49 @@
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 
-export async function getVariantProductMedia(
-  admin: AdminApiContext | any,
-  variantId: string
-): Promise<{ title: string; variantTitle: string; price: number; imageUrl: string }> {
-  const query = `#graphql
-    query getVariantDetails($id: ID!) {
-      productVariant(id: $id) {
-        title
-        price
-        image {
-          url
-        }
-        product {
-          title
-          featuredImage {
-            url
-          }
-        }
-      }
-    }
-  `;
-
-  const cleanId = String(variantId || "").replace(/\D/g, "");
-  const formattedVariantId = String(variantId || "").startsWith("gid://shopify/ProductVariant/")
-    ? variantId
-    : `gid://shopify/ProductVariant/${cleanId}`;
-
-  try {
-    const response = await admin.graphql(query, { variables: { id: formattedVariantId } });
-    const json = await response.json();
-    const variant = json.data?.productVariant;
-
-    const rawUrl = variant?.image?.url || variant?.product?.featuredImage?.url || "";
-    // Optimize using Shopify CDN resize parameter
-    const optimizedUrl = rawUrl
-      ? rawUrl.includes("?")
-        ? `${rawUrl}&width=240`
-        : `${rawUrl}?width=240`
-      : "";
-
-    return {
-      title: variant?.product?.title || "Restocked Item",
-      variantTitle: variant?.title || "Default Title",
-      price: parseFloat(variant?.price || "0"),
-      imageUrl: optimizedUrl,
-    };
-  } catch (err) {
-    console.error("[getVariantProductMedia Error]:", err);
-    return {
-      title: "Restocked Item",
-      variantTitle: "Default Title",
-      price: 0,
-      imageUrl: "",
-    };
-  }
+export interface ResolvedProductMedia {
+  productTitle: string;
+  variantTitle: string;
+  price: number;
+  variantId: string;
+  productId: string;
+  imageUrl: string;
 }
 
-export async function getFirstOutOfStockProduct(admin: AdminApiContext | any) {
-  const query = `#graphql
-    query getOutOfStockSample {
-      products(first: 10, query: "status:active") {
-        edges {
-          node {
+export function formatShopifyImageUrl(rawUrl?: string | null, width = 300): string {
+  if (!rawUrl) return "";
+  const separator = rawUrl.includes("?") ? "&" : "?";
+  return `${rawUrl}${separator}width=${width}`;
+}
+
+export async function getLiveProductMedia(
+  admin: AdminApiContext | any,
+  variantId?: string
+): Promise<ResolvedProductMedia | null> {
+  // If specific variant ID provided, query variant + parent product
+  if (variantId) {
+    const cleanId = String(variantId).replace(/\D/g, "");
+    const formattedId = String(variantId).startsWith("gid://shopify/ProductVariant/")
+      ? variantId
+      : `gid://shopify/ProductVariant/${cleanId}`;
+
+    const query = `#graphql
+      query getVariantMedia($id: ID!) {
+        productVariant(id: $id) {
+          id
+          title
+          price
+          image {
+            url
+          }
+          product {
             id
             title
             featuredImage {
               url
             }
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  title
-                  price
-                  availableForSale
+            media(first: 1) {
+              nodes {
+                ... on MediaImage {
                   image {
                     url
                   }
@@ -84,60 +53,121 @@ export async function getFirstOutOfStockProduct(admin: AdminApiContext | any) {
           }
         }
       }
+    `;
+
+    try {
+      const response = await admin.graphql(query, { variables: { id: formattedId } });
+      const json = await response.json();
+      const variant = json.data?.productVariant;
+
+      if (variant) {
+        const rawUrl =
+          variant.image?.url ||
+          variant.product?.featuredImage?.url ||
+          variant.product?.media?.nodes?.[0]?.image?.url ||
+          "";
+
+        return {
+          productId: variant.product?.id || "",
+          variantId: variant.id,
+          productTitle: variant.product?.title || "Restocked Item",
+          variantTitle: variant.title || "Default Title",
+          price: parseFloat(variant.price || "0"),
+          imageUrl: formatShopifyImageUrl(rawUrl, 300),
+        };
+      }
+    } catch (err) {
+      console.error("[GraphQL Variant Media Error]:", err);
+    }
+  }
+
+  // Fallback: Query active store products with media
+  const fallbackQuery = `#graphql
+    query getFirstStoreProduct {
+      products(first: 10, query: "status:active") {
+        nodes {
+          id
+          title
+          featuredImage {
+            url
+          }
+          media(first: 1) {
+            nodes {
+              ... on MediaImage {
+                image {
+                  url
+                }
+              }
+            }
+          }
+          variants(first: 1) {
+            nodes {
+              id
+              title
+              price
+              image {
+                url
+              }
+            }
+          }
+        }
+      }
     }
   `;
 
   try {
-    const response = await admin.graphql(query);
+    const response = await admin.graphql(fallbackQuery);
     const json = await response.json();
-    const edges = json.data?.products?.edges || [];
+    const products = json.data?.products?.nodes || [];
 
-    if (edges.length === 0) return null;
+    for (const prod of products) {
+      const variant = prod.variants?.nodes?.[0];
+      const rawUrl =
+        variant?.image?.url ||
+        prod.featuredImage?.url ||
+        prod.media?.nodes?.[0]?.image?.url;
 
-    // Prioritize variant that is currently out of stock (availableForSale === false)
-    for (const edge of edges) {
-      const node = edge.node;
-      const variants = node.variants?.edges || [];
-      const oosVariant = variants.find((v: any) => v.node?.availableForSale === false);
-      if (oosVariant) {
-        const variant = oosVariant.node;
-        const rawUrl = variant?.image?.url || node.featuredImage?.url || "";
-        const optimizedUrl = rawUrl
-          ? rawUrl.includes("?")
-            ? `${rawUrl}&width=240`
-            : `${rawUrl}?width=240`
-          : "";
+      if (rawUrl) {
         return {
-          productId: node.id,
-          variantId: variant.id,
-          productTitle: node.title,
-          variantTitle: variant.title || "Default Title",
-          price: parseFloat(variant.price || "0"),
-          imageUrl: optimizedUrl,
+          productId: prod.id,
+          variantId: variant?.id || "",
+          productTitle: prod.title,
+          variantTitle: variant?.title || "Default Title",
+          price: parseFloat(variant?.price || "0"),
+          imageUrl: formatShopifyImageUrl(rawUrl, 300),
         };
       }
     }
-
-    // Fallback: first active product and variant
-    const node = edges[0].node;
-    const variant = node.variants?.edges?.[0]?.node;
-    const rawUrl = variant?.image?.url || node.featuredImage?.url || "";
-    const optimizedUrl = rawUrl
-      ? rawUrl.includes("?")
-        ? `${rawUrl}&width=240`
-        : `${rawUrl}?width=240`
-      : "";
-
-    return {
-      productId: node.id,
-      variantId: variant?.id,
-      productTitle: node.title,
-      variantTitle: variant?.title || "Default Title",
-      price: parseFloat(variant?.price || "0"),
-      imageUrl: optimizedUrl,
-    };
   } catch (err) {
-    console.error("[getFirstOutOfStockProduct Error]:", err);
-    return null;
+    console.error("[GraphQL Fallback Media Error]:", err);
   }
+
+  return null;
+}
+
+// Backward-compatible adapter for existing callers
+export async function getVariantProductMedia(
+  admin: AdminApiContext | any,
+  variantId: string
+): Promise<{ title: string; variantTitle: string; price: number; imageUrl: string }> {
+  const media = await getLiveProductMedia(admin, variantId);
+  if (media) {
+    return {
+      title: media.productTitle,
+      variantTitle: media.variantTitle,
+      price: media.price,
+      imageUrl: media.imageUrl,
+    };
+  }
+  return {
+    title: "Restocked Item",
+    variantTitle: "Default Title",
+    price: 0,
+    imageUrl: "",
+  };
+}
+
+// Backward-compatible adapter for sample product fetching
+export async function getFirstOutOfStockProduct(admin: AdminApiContext | any) {
+  return await getLiveProductMedia(admin);
 }

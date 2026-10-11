@@ -44,6 +44,12 @@
 
     <form class="restockping-form" style="display: flex; flex-direction: column; width: 100%; gap: 10px;" onsubmit="return false;">
       <input
+        type="hidden"
+        id="restock-product-image"
+        name="productImageUrl"
+        value="{{ product.featured_image | image_url: width: 300 }}"
+      />
+      <input
         type="email"
         name="restock_email"
         placeholder="{{ block.settings.input_placeholder | default: 'Enter your email address' }}"
