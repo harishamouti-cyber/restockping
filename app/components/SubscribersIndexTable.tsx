@@ -7,6 +7,7 @@ export interface SubscriberItem {
   productTitle: string;
   variantTitle: string;
   priceSnapshot: number;
+  productImageUrl?: string | null;
   status: string;
   createdAt: string | Date;
   variantId: string;
@@ -88,10 +89,21 @@ export function SubscribersIndexTable({
         </span>
       </IndexTable.Cell>
       <IndexTable.Cell>
-        <div className="text-xs font-sans">
-          <div className="font-medium text-[#202223]">{sub.productTitle}</div>
-          <div className="text-[#616161] text-[11px]">
-            {sub.variantTitle} · ${Number(sub.priceSnapshot).toFixed(2)}
+        <div className="flex items-center gap-2.5">
+          {sub.productImageUrl ? (
+            <div className="w-8 h-10 bg-white border border-[#e1e3e5] rounded flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
+              <img
+                src={sub.productImageUrl}
+                alt={sub.productTitle}
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+          ) : null}
+          <div className="text-xs font-sans min-w-0">
+            <div className="font-medium text-[#202223] truncate">{sub.productTitle}</div>
+            <div className="text-[#616161] text-[11px]">
+              {sub.variantTitle} · ${Number(sub.priceSnapshot).toFixed(2)}
+            </div>
           </div>
         </div>
       </IndexTable.Cell>

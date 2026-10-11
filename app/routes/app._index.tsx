@@ -219,10 +219,10 @@ export default function RestockOverview() {
                 <button
                   type="button"
                   onClick={handleDismissSetup}
-                  className="text-xs text-[#8c9196] hover:text-[#202223] px-1 py-0.5 rounded cursor-pointer"
-                  title="Dismiss guide"
+                  className="text-xs font-medium text-[#616161] hover:text-[#202223] px-2 py-0.5 rounded hover:bg-[#f1f2f4] transition-colors cursor-pointer"
+                  title="Dismiss setup guide"
                 >
-                  ✕
+                  Dismiss
                 </button>
               </div>
             </div>
@@ -235,7 +235,7 @@ export default function RestockOverview() {
               }`}>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+                    <span className="text-[11px] font-medium text-[#616161]">
                       Step 1
                     </span>
                     {isStep1Done ? (
@@ -277,7 +277,7 @@ export default function RestockOverview() {
               }`}>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+                    <span className="text-[11px] font-medium text-[#616161]">
                       Step 2
                     </span>
                     {isStep2Done ? (
@@ -313,7 +313,7 @@ export default function RestockOverview() {
               }`}>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#616161]">
+                    <span className="text-[11px] font-medium text-[#616161]">
                       Step 3
                     </span>
                     {isStep3Done ? (

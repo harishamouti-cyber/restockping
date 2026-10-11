@@ -238,6 +238,10 @@ export default function Settings() {
     </div>
   );
 
+  const insertVariableIntoActiveField = (variable: string) => {
+    insertVariableIntoField(activeField || "emailSubjectTemplate", variable);
+  };
+
   const handleSave = () => {
     const fd = new FormData();
     fd.append("intent", "SAVE_SETTINGS");
@@ -358,13 +362,49 @@ export default function Settings() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
           {/* Left Column: Form Controls */}
           <div className="lg:col-span-6 space-y-3.5">
-            {/* Card 1: Restock Email Content */}
+            {/* Card 1: Restock Email Copywriting */}
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3.5">
               <div>
-                <span className="text-xs font-semibold text-[#202223] block">Restock Email Content</span>
+                <span className="text-xs font-semibold text-[#202223] block">Restock Email Copywriting</span>
                 <p className="text-[11px] text-[#6d7175]">
                   Customize the transactional alert sent to shoppers when inventory replenishes.
                 </p>
+              </div>
+
+              {/* Contextual Token Bar Above Text Inputs */}
+              <div className="bg-[#f6f6f7] border border-[#e1e3e5] rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#008060]" />
+                  <span className="text-[11px] font-medium text-[#202223]">
+                    Insert placeholder into active field:
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => insertVariableIntoActiveField("{{product_title}}")}
+                    className="px-2 py-0.5 text-[10px] font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded hover:bg-[#e4e5e7] transition-colors cursor-pointer shadow-2xs"
+                    title="Insert {{product_title}}"
+                  >
+                    + Product Title
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertVariableIntoActiveField("{{price}}")}
+                    className="px-2 py-0.5 text-[10px] font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded hover:bg-[#e4e5e7] transition-colors cursor-pointer shadow-2xs"
+                    title="Insert {{price}}"
+                  >
+                    + Product Price
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertVariableIntoActiveField("{{store}}")}
+                    className="px-2 py-0.5 text-[10px] font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded hover:bg-[#e4e5e7] transition-colors cursor-pointer shadow-2xs"
+                    title="Insert {{store}}"
+                  >
+                    + Store Name
+                  </button>
+                </div>
               </div>
 
               {/* Sender Name & Brand Name */}
@@ -542,13 +582,13 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Card 3: Pacing & Dispatch Rules */}
+            {/* Card 3: Inventory Pacing & Dispatch Rules */}
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
               <div>
-                <span className="text-xs font-semibold text-[#202223] block">Pacing & Dispatch Rules</span>
-                <p className="text-[11px] text-[#6d7175]">Control restock alert cohorts to prevent flash-crowd overselling.</p>
+                <span className="text-xs font-semibold text-[#202223] block">Inventory Pacing & Dispatch Rules</span>
+                <p className="text-[11px] text-[#6d7175]">Control restock alert cohorts and safety margins to prevent flash-crowd overselling.</p>
               </div>
-              <div className="grid grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-[#202223] block mb-1">Pacing Multiplier</label>
                   <input
@@ -559,7 +599,19 @@ export default function Settings() {
                     onChange={(e) => handleChange("dripBatchMultiplier", parseFloat(e.target.value) || 2.5)}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
                   />
-                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">e.g. 2.5x of restocked stock.</span>
+                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">e.g. 2.5x restocked units.</span>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#202223] block mb-1">Cooldown Window (Min)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    step="5"
+                    value={formState.dripIntervalMinutes}
+                    onChange={(e) => handleChange("dripIntervalMinutes", parseInt(e.target.value, 10) || 120)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                  />
+                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">Pause between cohorts.</span>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-[#202223] block mb-1">Min Restock Units</label>
@@ -570,14 +622,14 @@ export default function Settings() {
                     onChange={(e) => handleChange("minRestockThreshold", parseInt(e.target.value, 10) || 1)}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
                   />
-                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">Minimum units before alerts trigger.</span>
+                  <span className="text-[11px] text-[#8c9196] mt-0.5 block">Threshold before alerts fire.</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Right Column: Sticky Live Device & Storefront Preview */}
-          <div className="lg:col-span-6 sticky top-4 self-start space-y-2">
+          <div className="lg:col-span-6 sticky top-6 self-start z-10 space-y-2.5">
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col items-center">
               <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3">
                 {/* Primary Preview Mode Switcher */}
@@ -640,13 +692,20 @@ export default function Settings() {
                 <div
                   className={`w-full transition-all duration-300 flex justify-center ${
                     previewMode === "mobile"
-                      ? "max-w-[340px] p-2.5 bg-slate-900 rounded-[32px] shadow-xl border-4 border-slate-700"
+                      ? "max-w-[340px] p-3 bg-[#18181b] rounded-[44px] shadow-2xl border-[3px] border-[#27272a] relative mx-auto"
                       : "max-w-[500px]"
                   }`}
                 >
-                  <div className="w-full bg-white border border-[#e1e3e5] rounded-lg p-5 shadow-xs space-y-3.5">
+                  <div
+                    className={`w-full bg-white border border-[#e1e3e5] p-5 shadow-xs space-y-3.5 ${
+                      previewMode === "mobile" ? "rounded-[32px] overflow-hidden" : "rounded-lg"
+                    }`}
+                  >
                     {previewMode === "mobile" && (
-                      <div className="w-16 h-1 bg-slate-300 rounded-full mx-auto -mt-2 mb-2" />
+                      <div className="flex items-center justify-center gap-1.5 -mt-2 mb-3">
+                        <div className="w-12 h-1 bg-[#d4d4d8] rounded-full" />
+                        <div className="w-1.5 h-1.5 bg-[#d4d4d8] rounded-full" />
+                      </div>
                     )}
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#e3f1df] text-[#008060] text-[10px] font-semibold uppercase rounded">
                       ● Restock Notice
@@ -661,12 +720,12 @@ export default function Settings() {
 
                     {/* Clean Product Row with Aspect-Ratio Preserving Container */}
                     <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                      <div className="w-14 h-18 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                      <div className="w-16 h-22 bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
                         {previewItem.imageUrl ? (
                           <img
                             src={previewItem.imageUrl}
                             alt={previewItem.productTitle}
-                            className="max-w-full max-h-full object-contain"
+                            className="max-w-full max-h-full object-contain block mx-auto"
                           />
                         ) : (
                           <div className="text-[10px] text-slate-400 font-medium text-center leading-tight">
@@ -709,6 +768,10 @@ export default function Settings() {
                         Unsubscribe from this restock notification
                       </span>
                     </div>
+
+                    {previewMode === "mobile" && (
+                      <div className="w-24 h-1 bg-[#e4e4e7] rounded-full mx-auto mt-2" />
+                    )}
                   </div>
                 </div>
               ) : (
@@ -716,7 +779,7 @@ export default function Settings() {
                 <div className="w-full max-w-[480px] bg-white border border-[#e1e3e5] rounded-xl p-5 shadow-xs space-y-4">
                   {/* Dawn Mock Header */}
                   <div className="border-b border-[#f1f2f4] pb-3">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6d7175]">
+                    <span className="text-[10px] font-medium text-[#6d7175]">
                       {displayBrand}
                     </span>
                     <h3 className="text-base font-bold text-[#111827] mt-0.5">
@@ -726,8 +789,8 @@ export default function Settings() {
                       <span className="text-sm font-semibold text-[#111827]">
                         ${previewItem.price.toFixed(2)}
                       </span>
-                      <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded uppercase">
-                        Sold Out
+                      <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded">
+                        Sold out
                       </span>
                       <span className="text-[11px] text-[#6b7280]">
                         · {previewItem.variantTitle}

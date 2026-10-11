@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSubmit, useActionData } from "@remix-run/react";
+import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { getLiveProductMedia } from "../services/catalog.server";
+import { getAllActiveCatalogProducts, getLiveProductMedia, type CatalogProductOption } from "../services/catalog.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
   try {
-    const [settingsRecord, subscribers] = await Promise.all([
+    const [settingsRecord, pendingSubscribers, catalogProducts] = await Promise.all([
       db.restockSettings.findUnique({ where: { shop } }),
       db.restockSubscription.findMany({
         where: { shop, status: "PENDING" },
       }),
+      getAllActiveCatalogProducts(admin),
     ]);
 
     const settings = settingsRecord || {
@@ -22,34 +23,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dripIntervalMinutes: 120,
     };
 
-    // Aggregate pending subscribers by variant
-    const variantCounts = new Map<
-      string,
-      { productTitle: string; variantTitle: string; count: number }
-    >();
-    for (const s of subscribers) {
-      if (!variantCounts.has(s.variantId)) {
-        variantCounts.set(s.variantId, {
-          productTitle: s.productTitle,
-          variantTitle: s.variantTitle,
-          count: 0,
-        });
-      }
-      variantCounts.get(s.variantId)!.count += 1;
+    // Aggregate pending count by variantId from real database records
+    const waitingCounts = new Map<string, number>();
+    for (const sub of pendingSubscribers) {
+      const current = waitingCounts.get(sub.variantId) || 0;
+      waitingCounts.set(sub.variantId, current + 1);
     }
 
-    const availableVariants = Array.from(variantCounts.entries()).map(
-      ([variantId, data]) => ({
-        variantId,
-        displayName: `${data.productTitle} (${data.variantTitle})`,
-        waitingCount: data.count,
-      })
-    );
+    // Build selectable catalog list with real DB count attached if available
+    const availableCatalogVariants = catalogProducts.map((p) => ({
+      ...p,
+      actualWaitingCount: waitingCounts.get(p.variantId) || 0,
+    }));
 
     return json({
       settings,
-      availableVariants,
-      totalWaiting: subscribers.length,
+      availableCatalogVariants,
+      totalPendingInDb: pendingSubscribers.length,
+      shop,
     });
   } catch (err) {
     console.error("[app.simulation loader error]:", err);
@@ -58,8 +49,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         dripBatchMultiplier: 2.5,
         dripIntervalMinutes: 120,
       },
-      availableVariants: [],
-      totalWaiting: 0,
+      availableCatalogVariants: [] as (CatalogProductOption & { actualWaitingCount: number })[],
+      totalPendingInDb: 0,
+      shop,
     });
   }
 };
@@ -105,52 +97,81 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({
         success: true,
         sampleCreated: true,
-        message: "Created 3 sample waitlist shoppers for testing!",
+        message: "Created 3 sample waitlist shoppers in database for live testing!",
       });
     } catch (err: any) {
       return json({ success: false, error: err.message }, { status: 400 });
     }
   }
 
-  const units = parseInt(String(formData.get("units") || "4"), 10);
-  const multiplier = parseFloat(String(formData.get("multiplier") || "2.5"));
-  const waitingCount = parseInt(String(formData.get("waitingCount") || "0"), 10);
+  // Simulation Run Calculation
+  const units = Math.max(1, parseInt(String(formData.get("units") || "4"), 10));
+  const multiplier = parseFloat(String(formData.get("multiplier") || "2.5")) || 2.5;
+  const simulatedWaitingShoppers = Math.max(
+    1,
+    parseInt(String(formData.get("simulatedWaitingShoppers") || "25"), 10)
+  );
+  const productTitle = String(formData.get("productTitle") || "Target Product");
+  const variantTitle = String(formData.get("variantTitle") || "Default Variant");
+  const cooldownMinutes = parseInt(String(formData.get("cooldownMinutes") || "120"), 10);
 
-  const capacity = Math.round(units * multiplier);
-  const actualDispatched = Math.min(capacity, waitingCount);
-  const remainingWaiting = Math.max(0, waitingCount - actualDispatched);
+  const theoreticalCapacity = Math.round(units * multiplier);
+  const effectiveBatch = Math.min(theoreticalCapacity, simulatedWaitingShoppers);
+  const remainingWaiting = Math.max(0, simulatedWaitingShoppers - effectiveBatch);
 
   return json({
     success: true,
+    simulationCompleted: true,
+    productTitle,
+    variantTitle,
     units,
     multiplier,
-    capacity,
-    actualDispatched,
+    simulatedWaitingShoppers,
+    theoreticalCapacity,
+    effectiveBatch,
     remainingWaiting,
+    cooldownMinutes,
   });
 };
 
 export default function AlertSimulator() {
-  const { settings, availableVariants, totalWaiting } =
+  const { settings, availableCatalogVariants, totalPendingInDb } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
+  const navigation = useNavigation();
 
   const [units, setUnits] = useState(4);
-  const [selectedVariantId, setSelectedVariantId] = useState(
-    availableVariants[0]?.variantId || "sample_default"
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(
+    availableCatalogVariants[0]?.variantId || ""
   );
 
-  const selectedVariant = availableVariants.find(
-    (v) => v.variantId === selectedVariantId
-  );
-  const waitingShoppers = selectedVariant
-    ? selectedVariant.waitingCount
-    : totalWaiting;
+  const selectedProduct =
+    availableCatalogVariants.find((v) => v.variantId === selectedVariantId) ||
+    availableCatalogVariants[0];
+
+  // Initialize simulated shoppers based on actual waiting count if any exist, otherwise default to 25
+  const initialWaiting =
+    selectedProduct?.actualWaitingCount && selectedProduct.actualWaitingCount > 0
+      ? selectedProduct.actualWaitingCount
+      : 25;
+
+  const [simulatedWaitingShoppers, setSimulatedWaitingShoppers] = useState<number>(initialWaiting);
+
+  // Update simulated queue whenever variant selection changes if variant has real pending shoppers
+  useEffect(() => {
+    if (selectedProduct?.actualWaitingCount && selectedProduct.actualWaitingCount > 0) {
+      setSimulatedWaitingShoppers(selectedProduct.actualWaitingCount);
+    }
+  }, [selectedVariantId]);
+
   const multiplier = Number(settings.dripBatchMultiplier) || 2.5;
+  const cooldownMinutes = Number(settings.dripIntervalMinutes) || 120;
 
-  const theoreticalCapacity = Math.round(units * multiplier);
-  const effectiveBatch = Math.min(theoreticalCapacity, waitingShoppers);
+  // Real-time calculation preview
+  const liveTheoreticalCapacity = Math.round(units * multiplier);
+  const liveEffectiveBatch = Math.min(liveTheoreticalCapacity, simulatedWaitingShoppers);
+  const liveRemainingWaiting = Math.max(0, simulatedWaitingShoppers - liveEffectiveBatch);
 
   const showToast = (message: string, isError = false) => {
     try {
@@ -173,7 +194,10 @@ export default function AlertSimulator() {
       {
         units: units.toString(),
         multiplier: multiplier.toString(),
-        waitingCount: waitingShoppers.toString(),
+        simulatedWaitingShoppers: simulatedWaitingShoppers.toString(),
+        productTitle: selectedProduct?.productTitle || "Product",
+        variantTitle: selectedProduct?.variantTitle || "Default Title",
+        cooldownMinutes: cooldownMinutes.toString(),
       },
       { method: "POST" }
     );
@@ -183,148 +207,237 @@ export default function AlertSimulator() {
     submit({ intent: "CREATE_SAMPLE_SUBSCRIBERS" }, { method: "POST" });
   };
 
+  const isRunning =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") !== "CREATE_SAMPLE_SUBSCRIBERS";
+
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-16 font-sans text-[#202223] antialiased">
       <ui-title-bar title="Alert Simulator">
         <button onClick={handleCreateSampleShoppers}>
-          Create 3 Sample Shoppers
+          Add 3 Sample Shoppers
         </button>
       </ui-title-bar>
 
-      <main className="max-w-[960px] mx-auto px-4 py-4 space-y-3">
+      <main className="max-w-[960px] mx-auto px-4 py-4 space-y-3.5">
         {/* Main Test Run Card */}
-        <div className="p-4 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-[#202223]">
-              Smart restock pacing test run
-            </h2>
-            <p className="text-xs text-[#616161] mt-0.5">
-              Simulate inventory replenishment to test batch pacing, pause intervals, and 1-Click checkout links without sending live messages to real shoppers.
-            </p>
+        <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f1f2f4] pb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[#202223]">
+                Smart restock pacing sandbox
+              </h2>
+              <p className="text-xs text-[#616161] mt-0.5">
+                Simulate replenishment on any catalog item to verify batch cohort sizing, FIFO safety capacity, and cooldown intervals without emailing live customers.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-[#e3f1df] text-[#008060]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#008060]" />
+              {multiplier}x Pacing Active
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Interactive Input Form */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {/* Control 1: Catalog Product Selection (Never disabled!) */}
+            <div className="md:col-span-1">
+              <label className="text-xs font-medium text-[#202223] block mb-1">
+                Target catalog product
+              </label>
+              {availableCatalogVariants.length > 0 ? (
+                <select
+                  value={selectedVariantId}
+                  onChange={(e) => setSelectedVariantId(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                >
+                  {availableCatalogVariants.map((v) => (
+                    <option key={v.variantId} value={v.variantId}>
+                      {v.productTitle} - {v.variantTitle} {v.actualWaitingCount > 0 ? `(${v.actualWaitingCount} in DB)` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  disabled
+                  value="The Out of Stock Snowboard"
+                  className="w-full px-2.5 py-1.5 text-xs bg-[#f6f6f7] border border-[#d2d5d8] rounded-md text-[#616161]"
+                />
+              )}
+              <span className="text-[11px] text-[#8c9196] mt-1 block truncate">
+                {selectedProduct ? `${selectedProduct.productTitle} · $${selectedProduct.price.toFixed(2)}` : "Select an item"}
+              </span>
+            </div>
+
+            {/* Control 2: Restock Units Input */}
             <div>
               <label className="text-xs font-medium text-[#202223] block mb-1">
-                Restocked units to simulate
+                Replenished units to simulate
               </label>
               <input
                 type="number"
                 min="1"
                 value={units}
-                onChange={(e) =>
-                  setUnits(Math.max(1, parseInt(e.target.value) || 1))
-                }
-                className="w-full px-3 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
+                onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
               />
               <span className="text-[11px] text-[#8c9196] mt-1 block">
-                Simulated units replenished in warehouse
+                Warehouse units added to inventory
               </span>
             </div>
 
+            {/* Control 3: Simulated Waiting Shoppers */}
             <div>
               <label className="text-xs font-medium text-[#202223] block mb-1">
-                Target sold-out product
+                Simulated waiting shoppers
               </label>
-              {availableVariants.length > 0 ? (
-                <select
-                  value={selectedVariantId}
-                  onChange={(e) => setSelectedVariantId(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060]"
-                >
-                  {availableVariants.map((v) => (
-                    <option key={v.variantId} value={v.variantId}>
-                      {v.displayName} ({v.waitingCount} waiting)
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div>
-                  <input
-                    type="text"
-                    disabled
-                    value="All products currently in stock (0 waiting)"
-                    className="w-full px-3 py-1.5 text-xs bg-[#f6f6f7] border border-[#d2d5d8] rounded-md text-[#616161]"
-                  />
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[11px] text-[#616161]">No customer waitlist records yet.</span>
-                    <button
-                      type="button"
-                      onClick={handleCreateSampleShoppers}
-                      className="text-xs font-medium text-[#008060] bg-[#e3f1df] hover:bg-[#c1e5ba] px-2 py-0.5 rounded transition-colors cursor-pointer"
-                    >
-                      + Add 3 Sample Shoppers
-                    </button>
-                  </div>
-                </div>
-              )}
+              <input
+                type="number"
+                min="1"
+                value={simulatedWaitingShoppers}
+                onChange={(e) =>
+                  setSimulatedWaitingShoppers(Math.max(1, parseInt(e.target.value, 10) || 1))
+                }
+                className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+              />
               <span className="text-[11px] text-[#8c9196] mt-1 block">
-                Shoppers waiting to be notified:{" "}
-                <strong className="text-[#202223]">{waitingShoppers}</strong>
+                {selectedProduct?.actualWaitingCount && selectedProduct.actualWaitingCount > 0
+                  ? `${selectedProduct.actualWaitingCount} real pending shopper(s) registered in store`
+                  : "Simulate arbitrary waitlist volume to test cohort math"}
               </span>
             </div>
           </div>
 
-          {/* Synchronized Pacing Preview */}
-          <div className="p-3 bg-[#f6f6f7] border border-[#e1e3e5] rounded-md text-xs space-y-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#616161] block mb-2">
-              Pacing calculation preview
+          {/* Synchronized Live Pacing Calculation Preview */}
+          <div className="p-3.5 bg-[#f6f6f7] border border-[#e1e3e5] rounded-lg text-xs space-y-2">
+            <div className="flex items-center justify-between border-b border-[#e1e3e5] pb-1.5">
+              <span className="text-[11px] font-semibold text-[#616161]">
+                Live pacing calculation preview
+              </span>
+              <span className="text-[11px] text-[#616161]">
+                Cooldown interval: <strong className="text-[#202223]">{cooldownMinutes} minutes</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+              <div className="p-2 bg-white rounded border border-[#e1e3e5]">
+                <span className="text-[10px] text-[#8c9196] block">Restocked Units</span>
+                <span className="text-sm font-semibold text-[#202223]">{units}</span>
+              </div>
+              <div className="p-2 bg-white rounded border border-[#e1e3e5]">
+                <span className="text-[10px] text-[#8c9196] block">Safety Multiplier</span>
+                <span className="text-sm font-semibold text-[#202223]">{multiplier}x</span>
+              </div>
+              <div className="p-2 bg-white rounded border border-[#e1e3e5]">
+                <span className="text-[10px] text-[#8c9196] block">Safety Capacity</span>
+                <span className="text-sm font-semibold text-[#202223]">{liveTheoreticalCapacity} alerts</span>
+              </div>
+              <div className="p-2 bg-[#e3f1df] rounded border border-[#aee9d1]">
+                <span className="text-[10px] text-[#008060] block font-medium">Batch #1 Dispatched</span>
+                <span className="text-sm font-bold text-[#008060]">{liveEffectiveBatch} shoppers</span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-[#e1e3e5] flex flex-wrap items-center justify-between text-[11px] text-[#616161]">
+              <span>
+                Simulated Queue: <strong className="text-[#202223]">{simulatedWaitingShoppers} shoppers</strong>
+              </span>
+              <span>
+                Remaining Paused for Cooldown: <strong className="text-[#202223]">{liveRemainingWaiting} shoppers</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRunSimulation}
+              disabled={isRunning}
+              className="px-4 py-2 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              {isRunning ? "Calculating..." : "Run test simulation"}
+            </button>
+            <span className="text-[11px] text-[#8c9196]">
+              Dry-run only · No actual customer emails will be sent
             </span>
-            <div className="flex justify-between text-[#616161]">
-              <span>Replenished units:</span>
-              <span className="font-medium text-[#202223]">{units} units</span>
-            </div>
-            <div className="flex justify-between text-[#616161]">
-              <span>Configured pacing multiplier:</span>
-              <span className="font-medium text-[#202223]">{multiplier}x</span>
-            </div>
-            <div className="flex justify-between text-[#616161]">
-              <span>Maximum safety capacity:</span>
-              <span className="font-medium text-[#202223]">
-                {theoreticalCapacity} alerts
-              </span>
-            </div>
-            <div className="flex justify-between border-t border-[#e1e3e5] pt-1.5 font-medium text-[#202223]">
-              <span>Target notification batch size:</span>
-              <span className="text-[#008060] font-semibold">
-                {effectiveBatch}{" "}
-                {effectiveBatch === 1 ? "customer" : "customers"}
-              </span>
-            </div>
           </div>
-
-          <button
-            onClick={handleRunSimulation}
-            className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors cursor-pointer"
-          >
-            Run test simulation
-          </button>
         </div>
 
-        {/* Dynamic Result Card */}
-        {actionData?.success && (
-          <div className="p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-1">
+        {/* Comprehensive Success Summary Card */}
+        {actionData?.success && (actionData as any).simulationCompleted && (
+          <div className="p-4 bg-white border border-[#008060] rounded-xl shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#008060] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#008060]" />
-                Test run completed successfully
+              <span className="text-xs font-semibold text-[#008060] flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#008060]" />
+                Simulation Run Completed Successfully
               </span>
-              <span className="text-[10px] font-medium bg-[#e3f1df] text-[#008060] px-1.5 py-0.5 rounded">
-                Batch #1 Dry Run
+              <span className="text-[11px] font-semibold bg-[#e3f1df] text-[#008060] px-2 py-0.5 rounded">
+                Batch #1 Dry Run Verified
               </span>
             </div>
-            <p className="text-xs text-[#616161] leading-relaxed">
-              Dispatched{" "}
-              <strong className="text-[#202223]">
-                {actionData.actualDispatched} test alerts
-              </strong>{" "}
-              based on {actionData.units} restocked units and a{" "}
-              {actionData.multiplier}x multiplier. Remaining waiting shoppers:{" "}
-              <strong className="text-[#202223]">
-                {actionData.remainingWaiting}
-              </strong>
-              .
-            </p>
+
+            <div className="p-3 bg-[#f0f9f4] border border-[#d1f0df] rounded-lg space-y-1.5 text-xs text-[#202223] leading-relaxed">
+              <p>
+                <strong>{(actionData as any).effectiveBatch}</strong> of{" "}
+                <strong>{(actionData as any).simulatedWaitingShoppers}</strong> waiting shoppers would receive restock alerts in the first notification batch for{" "}
+                <em>{(actionData as any).productTitle}</em> ({(actionData as any).variantTitle}).
+              </p>
+              <p className="text-[#616161]">
+                Applied <strong>{(actionData as any).multiplier}x</strong> pacing multiplier to{" "}
+                <strong>{(actionData as any).units}</strong> restocked warehouse units (Maximum safety limit:{" "}
+                {(actionData as any).theoreticalCapacity} alert capacity).
+              </p>
+              <p className="text-[#616161]">
+                <strong>{(actionData as any).remainingWaiting}</strong> shoppers remain paused and queued for the{" "}
+                <strong>{(actionData as any).cooldownMinutes}</strong>-minute cooldown window before Batch #2 triggers, successfully preventing overselling and site traffic surges.
+              </p>
+            </div>
+
+            {/* Visual Cohort Split Bar */}
+            <div>
+              <div className="flex justify-between text-[11px] text-[#616161] mb-1">
+                <span>
+                  Batch #1: {(actionData as any).effectiveBatch} (
+                  {Math.round(
+                    ((actionData as any).effectiveBatch /
+                      (actionData as any).simulatedWaitingShoppers) *
+                      100
+                  )}
+                  %)
+                </span>
+                <span>
+                  Paused Queue: {(actionData as any).remainingWaiting} (
+                  {Math.round(
+                    ((actionData as any).remainingWaiting /
+                      (actionData as any).simulatedWaitingShoppers) *
+                      100
+                  )}
+                  %)
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-[#f1f2f4] rounded-full overflow-hidden flex">
+                <div
+                  style={{
+                    width: `${Math.round(
+                      ((actionData as any).effectiveBatch /
+                        (actionData as any).simulatedWaitingShoppers) *
+                        100
+                    )}%`,
+                  }}
+                  className="bg-[#008060] h-full"
+                />
+                <div
+                  style={{
+                    width: `${Math.round(
+                      ((actionData as any).remainingWaiting /
+                        (actionData as any).simulatedWaitingShoppers) *
+                        100
+                    )}%`,
+                  }}
+                  className="bg-[#d2d5d8] h-full"
+                />
+              </div>
+            </div>
           </div>
         )}
       </main>

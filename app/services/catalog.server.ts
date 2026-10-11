@@ -9,17 +9,33 @@ export interface ResolvedProductMedia {
   imageUrl: string;
 }
 
+export interface CatalogProductOption {
+  productId: string;
+  variantId: string;
+  productTitle: string;
+  variantTitle: string;
+  price: number;
+  imageUrl: string;
+}
+
 export function formatShopifyImageUrl(rawUrl?: string | null, width = 300): string {
   if (!rawUrl) return "";
   const separator = rawUrl.includes("?") ? "&" : "?";
   return `${rawUrl}${separator}width=${width}`;
 }
 
+/**
+ * Resilient multi-tiered media extraction:
+ * 1. Specific variant image (variant.image.url)
+ * 2. Parent product primary featured image (product.featuredImage.url)
+ * 3. Broader media nodes (product.media(first: 10) -> MediaImage -> image.url)
+ * Appends Shopify's native width transformation query parameter.
+ */
 export async function getLiveProductMedia(
   admin: AdminApiContext | any,
   variantId?: string
 ): Promise<ResolvedProductMedia | null> {
-  // If specific variant ID provided, query variant + parent product
+  // Tier 1: Query specific variant ID if provided
   if (variantId) {
     const cleanId = String(variantId).replace(/\D/g, "");
     const formattedId = String(variantId).startsWith("gid://shopify/ProductVariant/")
@@ -41,7 +57,7 @@ export async function getLiveProductMedia(
             featuredImage {
               url
             }
-            media(first: 1) {
+            media(first: 10) {
               nodes {
                 ... on MediaImage {
                   image {
@@ -61,11 +77,16 @@ export async function getLiveProductMedia(
       const variant = json.data?.productVariant;
 
       if (variant) {
-        const rawUrl =
-          variant.image?.url ||
-          variant.product?.featuredImage?.url ||
-          variant.product?.media?.nodes?.[0]?.image?.url ||
-          "";
+        let rawUrl = variant.image?.url || variant.product?.featuredImage?.url;
+
+        if (!rawUrl && variant.product?.media?.nodes) {
+          for (const node of variant.product.media.nodes) {
+            if (node?.image?.url) {
+              rawUrl = node.image.url;
+              break;
+            }
+          }
+        }
 
         return {
           productId: variant.product?.id || "",
@@ -81,17 +102,17 @@ export async function getLiveProductMedia(
     }
   }
 
-  // Fallback: Query active store products with media
+  // Tier 2: Query active store products with multi-tiered media resolution
   const fallbackQuery = `#graphql
-    query getFirstStoreProduct {
-      products(first: 10, query: "status:active") {
+    query getActiveCatalogMedia {
+      products(first: 15, query: "status:active") {
         nodes {
           id
           title
           featuredImage {
             url
           }
-          media(first: 1) {
+          media(first: 10) {
             nodes {
               ... on MediaImage {
                 image {
@@ -100,7 +121,7 @@ export async function getLiveProductMedia(
               }
             }
           }
-          variants(first: 1) {
+          variants(first: 5) {
             nodes {
               id
               title
@@ -122,12 +143,18 @@ export async function getLiveProductMedia(
 
     for (const prod of products) {
       const variant = prod.variants?.nodes?.[0];
-      const rawUrl =
-        variant?.image?.url ||
-        prod.featuredImage?.url ||
-        prod.media?.nodes?.[0]?.image?.url;
+      let rawUrl = variant?.image?.url || prod.featuredImage?.url;
 
-      if (rawUrl) {
+      if (!rawUrl && prod.media?.nodes) {
+        for (const node of prod.media.nodes) {
+          if (node?.image?.url) {
+            rawUrl = node.image.url;
+            break;
+          }
+        }
+      }
+
+      if (rawUrl || prod.title) {
         return {
           productId: prod.id,
           variantId: variant?.id || "",
@@ -139,10 +166,129 @@ export async function getLiveProductMedia(
       }
     }
   } catch (err) {
-    console.error("[GraphQL Fallback Media Error]:", err);
+    console.error("[GraphQL Fallback Catalog Media Error]:", err);
   }
 
   return null;
+}
+
+/**
+ * Fetches all active catalog products and their variants for simulator selection.
+ * Always resolves variant image -> product featuredImage -> media nodes.
+ */
+export async function getAllActiveCatalogProducts(
+  admin: AdminApiContext | any
+): Promise<CatalogProductOption[]> {
+  const query = `#graphql
+    query getAllCatalogProducts {
+      products(first: 30, query: "status:active") {
+        nodes {
+          id
+          title
+          featuredImage {
+            url
+          }
+          media(first: 10) {
+            nodes {
+              ... on MediaImage {
+                image {
+                  url
+                }
+              }
+            }
+          }
+          variants(first: 10) {
+            nodes {
+              id
+              title
+              price
+              image {
+                url
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await admin.graphql(query);
+    const json = await response.json();
+    const products = json.data?.products?.nodes || [];
+
+    const options: CatalogProductOption[] = [];
+
+    for (const prod of products) {
+      let prodMediaUrl = prod.featuredImage?.url;
+      if (!prodMediaUrl && prod.media?.nodes) {
+        for (const node of prod.media.nodes) {
+          if (node?.image?.url) {
+            prodMediaUrl = node.image.url;
+            break;
+          }
+        }
+      }
+
+      const variants = prod.variants?.nodes || [];
+      if (variants.length === 0) {
+        options.push({
+          productId: prod.id,
+          variantId: `gid://shopify/ProductVariant/${prod.id.replace(/\D/g, "")}_default`,
+          productTitle: prod.title,
+          variantTitle: "Default Title",
+          price: 0,
+          imageUrl: formatShopifyImageUrl(prodMediaUrl, 300),
+        });
+      } else {
+        for (const v of variants) {
+          const rawUrl = v.image?.url || prodMediaUrl;
+          options.push({
+            productId: prod.id,
+            variantId: v.id,
+            productTitle: prod.title,
+            variantTitle: v.title,
+            price: parseFloat(v.price || "0"),
+            imageUrl: formatShopifyImageUrl(rawUrl, 300),
+          });
+        }
+      }
+    }
+
+    if (options.length > 0) {
+      return options;
+    }
+  } catch (err) {
+    console.error("[GraphQL GetAllCatalogProducts Error]:", err);
+  }
+
+  // Graceful fallback for brand-new dev stores with empty catalog
+  return [
+    {
+      productId: "gid://shopify/Product/sample_snowboard",
+      variantId: "gid://shopify/ProductVariant/sample_snowboard_std",
+      productTitle: "The Out of Stock Snowboard",
+      variantTitle: "Standard Edition",
+      price: 885.95,
+      imageUrl: "",
+    },
+    {
+      productId: "gid://shopify/Product/sample_hoodie",
+      variantId: "gid://shopify/ProductVariant/sample_hoodie_blk",
+      productTitle: "Heavyweight Cotton Hoodie",
+      variantTitle: "Washed Black / Large",
+      price: 110.0,
+      imageUrl: "",
+    },
+    {
+      productId: "gid://shopify/Product/sample_sneakers",
+      variantId: "gid://shopify/ProductVariant/sample_sneakers_10",
+      productTitle: "Trail Runner Sport Shoes",
+      variantTitle: "Slate Grey / US 10",
+      price: 165.0,
+      imageUrl: "",
+    },
+  ];
 }
 
 // Backward-compatible adapter for existing callers

@@ -25,13 +25,8 @@ export interface SendEmailParams {
 
 export type SendRestockEmailOptions = SendEmailParams;
 
-export function sanitizeShopBrandName(shop: string, explicitName?: string): string {
-  if (explicitName && explicitName.trim().length > 0) {
-    return explicitName.trim();
-  }
-  const clean = shop.replace(".myshopify.com", "").replace(/-[a-z0-9]{8,}$/i, "");
-  return clean.charAt(0).toUpperCase() + clean.slice(1);
-}
+import { sanitizeShopBrandName } from "../utils/brand";
+export { sanitizeShopBrandName };
 
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 465;
@@ -120,10 +115,10 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
   const imageHtml = cleanImageUrl && cleanImageUrl.startsWith("http")
-    ? `<td width="88" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:6px;">
-         <img src="${cleanImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:96px;width:auto;height:auto;object-fit:contain;display:block;" />
+    ? `<td width="92" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
+         <img src="${cleanImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:104px;width:auto;height:auto;object-fit:contain;display:block;margin:0 auto;" />
        </td>`
-    : `<td width="88" align="center" valign="middle" style="background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:12px;color:#9ca3af;font-size:11px;font-weight:500;">
+    : `<td width="92" align="center" valign="middle" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 8px;color:#9ca3af;font-size:11px;font-weight:500;text-align:center;">
          In Stock
        </td>`;
 
