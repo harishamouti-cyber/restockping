@@ -31,7 +31,7 @@ const FLOW_TRIGGER_RECEIVE_MUTATION = `#graphql
 
 /**
  * Emits a native Shopify Flow trigger for a customer whose requested item has been restocked.
- * Passes customer details and a 1-Click checkout link to Shopify Flow.
+ * Passes customer details and a direct checkout link to Shopify Flow.
  */
 export async function emitRestockFlowTrigger(
   adminOrShop: AdminClient | string,

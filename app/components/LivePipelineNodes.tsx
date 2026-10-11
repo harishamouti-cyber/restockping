@@ -25,7 +25,7 @@ export function LivePipelineNodes({ pendingCount = 0 }: { pendingCount: number }
     },
     {
       num: "04",
-      badge: "1-Click",
+      badge: "Direct Link",
       badgeColor: "bg-[#e3f1df] text-[#008060]",
       title: "Direct checkout link",
       desc: "Sends shoppers straight to checkout with pre-filled items.",
@@ -40,7 +40,7 @@ export function LivePipelineNodes({ pendingCount = 0 }: { pendingCount: number }
         </span>
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-[#e3f1df] text-[#008060]">
           <span className="w-1.5 h-1.5 rounded-full bg-[#008060]" />
-          All systems operational
+          Workflow: 4-stage alert pipeline
         </span>
       </div>
 

@@ -225,21 +225,47 @@ export default function AlertSimulator() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f1f2f4] pb-3">
             <div>
               <h2 className="text-sm font-semibold text-[#202223]">
-                Smart restock pacing sandbox
+                Restock alert pacing sandbox
               </h2>
               <p className="text-xs text-[#616161] mt-0.5">
-                Simulate replenishment on any catalog item to verify batch cohort sizing, FIFO safety capacity, and cooldown intervals without emailing live customers.
+                Simulate warehouse restocks on any catalog product to test notification batch sizes, queue progression, and cooldown intervals without emailing live customers.
               </p>
             </div>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-[#e3f1df] text-[#008060]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#008060]" />
-              {multiplier}x Pacing Active
+              {multiplier}x Cohort Pacing Active
             </span>
+          </div>
+
+          {/* Policy Explanation Banner */}
+          <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg text-xs space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-[#0f172a]">
+                Understanding Pacing Multipliers & Inventory Policy:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-[#475569] leading-relaxed">
+              <div className="p-2.5 bg-white rounded border border-[#e2e8f0]">
+                <strong className="text-[#0f172a] block mb-1">
+                  Paced Cohort Mode ({multiplier > 1 ? `${multiplier}x` : "> 1.0x"} ratio)
+                </strong>
+                Notifies a cohort larger than physical stock ({units} units × {multiplier}x = {liveTheoreticalCapacity} alerts). This anticipates that ~{Math.round(100 / Math.max(1, multiplier))}% of notified shoppers will complete checkout. Ideal for fast stock clearing.
+              </div>
+              <div className="p-2.5 bg-white rounded border border-[#e2e8f0]">
+                <strong className="text-[#0f172a] block mb-1">
+                  Strict 1:1 Conservative Policy (1.0x ratio)
+                </strong>
+                Dispatches exactly 1 alert per physical item (e.g. 4 units = 4 alerts). Zero chance of notifying more customers than available units. Ideal for high-demand, limited-edition products.
+              </div>
+            </div>
+            <p className="text-[10px] text-[#64748b] pt-1 border-t border-[#e2e8f0]">
+              * <em>Important:</em> Shopify processes orders on a first-come, first-served basis at checkout. RestockPing does not reserve inventory or hold customer carts.
+            </p>
           </div>
 
           {/* Interactive Input Form */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            {/* Control 1: Catalog Product Selection (Never disabled!) */}
+            {/* Control 1: Catalog Product Selection */}
             <div className="md:col-span-1">
               <label className="text-xs font-medium text-[#202223] block mb-1">
                 Target catalog product
@@ -325,11 +351,11 @@ export default function AlertSimulator() {
                 <span className="text-sm font-semibold text-[#202223]">{units}</span>
               </div>
               <div className="p-2 bg-white rounded border border-[#e1e3e5]">
-                <span className="text-[10px] text-[#8c9196] block">Safety Multiplier</span>
+                <span className="text-[10px] text-[#8c9196] block">Pacing Multiplier</span>
                 <span className="text-sm font-semibold text-[#202223]">{multiplier}x</span>
               </div>
               <div className="p-2 bg-white rounded border border-[#e1e3e5]">
-                <span className="text-[10px] text-[#8c9196] block">Safety Capacity</span>
+                <span className="text-[10px] text-[#8c9196] block">Target Alert Cohort</span>
                 <span className="text-sm font-semibold text-[#202223]">{liveTheoreticalCapacity} alerts</span>
               </div>
               <div className="p-2 bg-[#e3f1df] rounded border border-[#aee9d1]">
@@ -358,7 +384,7 @@ export default function AlertSimulator() {
               {isRunning ? "Calculating..." : "Run test simulation"}
             </button>
             <span className="text-[11px] text-[#8c9196]">
-              Dry-run only · No actual customer emails will be sent
+              Dry-run only · No customer emails are sent during simulation
             </span>
           </div>
         </div>
@@ -384,12 +410,12 @@ export default function AlertSimulator() {
               </p>
               <p className="text-[#616161]">
                 Applied <strong>{(actionData as any).multiplier}x</strong> pacing multiplier to{" "}
-                <strong>{(actionData as any).units}</strong> restocked warehouse units (Maximum safety limit:{" "}
+                <strong>{(actionData as any).units}</strong> restocked warehouse units (Target cohort:{" "}
                 {(actionData as any).theoreticalCapacity} alert capacity).
               </p>
               <p className="text-[#616161]">
                 <strong>{(actionData as any).remainingWaiting}</strong> shoppers remain paused and queued for the{" "}
-                <strong>{(actionData as any).cooldownMinutes}</strong>-minute cooldown window before Batch #2 triggers, successfully preventing overselling and site traffic surges.
+                <strong>{(actionData as any).cooldownMinutes}</strong>-minute cooldown window before Batch #2 triggers, spacing out demand cohorts and preventing simultaneous checkout traffic surges.
               </p>
             </div>
 

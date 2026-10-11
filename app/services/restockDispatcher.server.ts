@@ -238,6 +238,6 @@ async function sendRestockNotificationEmail({
   } else {
     // Development / test fallback logging
     console.log(`[RestockPing FIFO Alert Dispatched] to: ${to} | subject: ${subject}`);
-    console.log(`[1-Click Permalink]: ${cartPermalink}`);
+    console.log(`[Direct Checkout Permalink]: ${cartPermalink}`);
   }
 }

@@ -102,10 +102,12 @@ export async function processInventoryRestock({
   shop,
   inventoryItemId,
   newAvailableQuantity,
+  admin,
 }: {
   shop: string;
   inventoryItemId: string;
   newAvailableQuantity: number;
+  admin?: any;
 }) {
   const settings = (await db.restockSettings.findUnique({ where: { shop } })) || {
     dripBatchMultiplier: 2.5,
@@ -115,43 +117,124 @@ export async function processInventoryRestock({
     emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
     emailHeadline: "Your item is back in stock",
     emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-    emailButtonText: "Claim in 1-Click Checkout →",
+    emailButtonText: "Claim In-Stock Item →",
   };
 
-  if (newAvailableQuantity < settings.minRestockThreshold) {
-    return { processed: 0 };
+  if (newAvailableQuantity < (settings.minRestockThreshold || 1)) {
+    return { processed: 0, reason: "Restocked units below minimum threshold" };
   }
 
   const rawId = inventoryItemId.replace(/\D/g, "");
+  const gid = `gid://shopify/InventoryItem/${rawId}`;
 
-  // Match pending subscribers specifically for this replenished inventory item
-  let pendingSubscribers = await db.restockSubscription.findMany({
+  // 1. Resolve inventory item to variant via mapping table or Shopify Admin GraphQL API
+  let resolvedVariantId: string | null = null;
+
+  const existingMapping = await db.inventoryItemMapping.findFirst({
+    where: {
+      shop,
+      OR: [
+        { inventoryItemId: gid },
+        { inventoryItemId: rawId },
+        { inventoryItemId: inventoryItemId },
+      ],
+    },
+  });
+
+  if (existingMapping) {
+    resolvedVariantId = existingMapping.variantId;
+  } else if (admin) {
+    try {
+      const query = `#graphql
+        query getVariantByInventoryItem($id: ID!) {
+          inventoryItem(id: $id) {
+            id
+            sku
+            variant {
+              id
+              title
+              price
+              product {
+                id
+                title
+                featuredImage {
+                  url
+                }
+              }
+            }
+          }
+        }
+      `;
+      const response = await admin.graphql(query, { variables: { id: gid } });
+      const json = await response.json();
+      const item = json.data?.inventoryItem;
+
+      if (item?.variant) {
+        resolvedVariantId = item.variant.id;
+        const resolvedProductId = item.variant.product?.id || "";
+        const resolvedSku = item.sku || null;
+
+        // Persist mapping for rapid subsequent lookups
+        await db.inventoryItemMapping.upsert({
+          where: { inventoryItemId: gid },
+          update: {
+            shop,
+            productId: resolvedProductId,
+            variantId: resolvedVariantId,
+            sku: resolvedSku,
+          },
+          create: {
+            inventoryItemId: gid,
+            shop,
+            productId: resolvedProductId,
+            variantId: resolvedVariantId,
+            sku: resolvedSku,
+          },
+        });
+
+        // Backfill placeholder mapped_ variant records to real Shopify InventoryItem GID
+        await db.restockSubscription.updateMany({
+          where: {
+            shop,
+            variantId: resolvedVariantId,
+            inventoryItemId: { startsWith: "mapped_" },
+          },
+          data: {
+            inventoryItemId: gid,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[GraphQL InventoryItem Resolution Error]:", err);
+    }
+  }
+
+  // 2. Query ONLY pending waitlist subscribers for this specific replenished variant/item
+  const pendingSubscribers = await db.restockSubscription.findMany({
     where: {
       shop,
       status: "PENDING",
       OR: [
-        { inventoryItemId: inventoryItemId },
+        ...(resolvedVariantId ? [{ variantId: resolvedVariantId }] : []),
+        { inventoryItemId: gid },
         { inventoryItemId: rawId },
-        { inventoryItemId: `gid://shopify/InventoryItem/${rawId}` },
+        { inventoryItemId: inventoryItemId },
       ],
     },
     orderBy: { createdAt: "asc" },
   });
 
-  // If no records explicitly match the exact inventoryItemId, fetch shop pending subscribers as fallback
+  // CRITICAL SAFETY POLICY: If no subscribers are waiting for THIS product, exit cleanly.
+  // Never fall back to querying or emailing unrelated subscribers across the store!
   if (pendingSubscribers.length === 0) {
-    pendingSubscribers = await db.restockSubscription.findMany({
-      where: { shop, status: "PENDING" },
-      orderBy: { createdAt: "asc" },
-    });
+    return { processed: 0, reason: "No pending waitlist requests for this item" };
   }
 
-  if (pendingSubscribers.length === 0) {
-    return { processed: 0 };
-  }
-
+  // 3. Pacing Cohort Calculation:
+  // Multiplier >= 1.0 (1.0 = strict 1:1, > 1.0 = paced over-notification cohort)
+  const multiplier = Math.max(1.0, Number(settings.dripBatchMultiplier) || 2.5);
   const targetBatchSize = Math.min(
-    Math.round(newAvailableQuantity * (settings.dripBatchMultiplier || 2.5)),
+    Math.round(newAvailableQuantity * multiplier),
     pendingSubscribers.length
   );
 
@@ -175,7 +258,7 @@ export async function processInventoryRestock({
         subjectTemplate: settings.emailSubjectTemplate,
         headlineText: settings.emailHeadline,
         bodyText: settings.emailBodyText,
-        buttonText: settings.emailButtonText,
+        buttonText: settings.emailButtonText || "Claim In-Stock Item →",
         accentColor: settings.accentColor,
         discountCode: settings.incentiveDiscountCode || undefined,
         subscriptionId: sub.id,
@@ -208,6 +291,7 @@ export async function processFifoInventoryRestock(params: {
     shop: params.shop,
     inventoryItemId: params.inventoryItemId,
     newAvailableQuantity: params.availableUnits,
+    admin: params.admin,
   });
   return {
     dispatchedCount: result.processed,

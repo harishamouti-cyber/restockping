@@ -381,7 +381,7 @@ export default function SubscribersPage() {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
     }
-    showToast("1-Click checkout link copied to clipboard");
+    showToast("Direct checkout link copied to clipboard");
   };
 
   const tabs = [

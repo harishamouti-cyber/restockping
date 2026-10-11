@@ -47,14 +47,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "emailSubjectTemplate" TEXT NOT NULL DEFAULT 'Back in Stock: {{product_title}} is ready to ship',
         "emailHeadline" TEXT NOT NULL DEFAULT 'Your item is back in stock',
         "emailBodyText" TEXT NOT NULL DEFAULT 'Good news! An item you requested is available again. Complete your order now before inventory runs out.',
-        "emailButtonText" TEXT NOT NULL DEFAULT 'Claim in 1-Click Checkout →',
+        "emailButtonText" TEXT NOT NULL DEFAULT 'Claim In-Stock Item →',
         "storeDisplayName" TEXT DEFAULT '',
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailHeadline" TEXT NOT NULL DEFAULT 'Your item is back in stock'`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailBodyText" TEXT NOT NULL DEFAULT 'Good news! An item you requested is available again. Complete your order now before inventory runs out.'`,
-      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailButtonText" TEXT NOT NULL DEFAULT 'Claim in 1-Click Checkout →'`,
+      `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailButtonText" TEXT NOT NULL DEFAULT 'Claim In-Stock Item →'`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storeDisplayName" TEXT DEFAULT ''`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storefrontButtonText" TEXT DEFAULT 'Notify Me When Available'`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storefrontSuccessMessage" TEXT DEFAULT 'You''re on the waitlist! We''ll email you the moment stock returns.'`,
@@ -105,7 +105,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
           emailHeadline: "Your item is back in stock",
           emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-          emailButtonText: "Claim in 1-Click Checkout →",
+          emailButtonText: "Claim In-Stock Item →",
         },
       });
     } catch (healErr) {

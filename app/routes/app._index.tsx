@@ -159,7 +159,7 @@ export default function RestockOverview() {
             </span>
             <span className="text-[#8c9196] text-xs">·</span>
             <span className="text-xs text-[#616161]">
-              Connected to store inventory ({multiplier}x protection active)
+              Connected to store inventory ({multiplier}x cohort pacing)
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -348,11 +348,11 @@ export default function RestockOverview() {
 
         {/* 3 Metric Cards: Exact Shopify Analytics Style */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Card 1: Potential Waitlist Revenue */}
+          {/* Card 1: Pending Waitlist Demand */}
           <div className="p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col justify-between min-h-[92px]">
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-normal text-[#616161]">
-                Potential waitlist revenue
+                Pending waitlist demand
               </span>
               <span className="text-[11px] font-medium text-[#616161] bg-[#f1f2f4] px-1.5 py-0.5 rounded">
                 {isWaitlistActive ? "Active" : "All caught up"}
@@ -363,7 +363,7 @@ export default function RestockOverview() {
               ${totalPotentialRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[11px] text-[#8c9196] mt-1 truncate">
-              {isWaitlistActive ? "Customer intent across sold-out items" : "All requests notified and cleared"}
+              {isWaitlistActive ? "Total retail value across waiting shoppers" : "All requests notified and cleared"}
             </div>
           </div>
 
@@ -388,22 +388,22 @@ export default function RestockOverview() {
             </div>
           </div>
 
-          {/* Card 3: Recovered Sales */}
+          {/* Card 3: Alerts Dispatched */}
           <div className="p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col justify-between min-h-[92px]">
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-normal text-[#616161]">
-                Recovered sales
+                Alerts dispatched
               </span>
               <span className="text-[11px] font-medium text-[#616161] bg-[#f1f2f4] px-1.5 py-0.5 rounded">
-                {metrics.dispatchedCount > 0 ? `${metrics.dispatchedCount} sent` : "0 sent"}
+                {metrics.dispatchedCount > 0 ? "Dispatched" : "No alerts yet"}
               </span>
             </div>
             {/* Clean, unslashed, normal round zero */}
             <div className="shopify-numeral mt-1">
-              {metrics.convertedCount}
+              {metrics.dispatchedCount}
             </div>
             <div className="text-[11px] text-[#8c9196] mt-1 truncate">
-              Orders placed via 1-click checkout links
+              Restock notifications sent to waitlist customers
             </div>
           </div>
         </div>
@@ -415,15 +415,15 @@ export default function RestockOverview() {
             <TopDemandProducts products={topDemandList} />
           </div>
 
-          {/* Right Column (5 of 12 cols): Restock Protection Simulator */}
+          {/* Right Column (5 of 12 cols): Restock Pacing Simulator Teaser */}
           <div className="lg:col-span-5 h-full p-3.5 bg-white border border-[#e1e3e5] rounded-lg shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2.5">
                 <span className="text-[13px] font-medium text-[#202223]">
-                  Restock protection
+                  Restock alert pacing
                 </span>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#e3f1df] text-[#008060]">
-                  Active ({multiplier}x)
+                  Active ({multiplier}x cohort)
                 </span>
               </div>
 
@@ -443,7 +443,7 @@ export default function RestockOverview() {
                     </span>
                   </div>
                   <p className="text-[11px] text-[#616161] leading-relaxed">
-                    Paced dispatch prevents inventory burnout so shoppers don't encounter immediate stockouts.
+                    Paced dispatch spaces out demand cohorts so shoppers don't encounter sudden stockouts.
                   </p>
                 </div>
               ) : (
@@ -454,7 +454,7 @@ export default function RestockOverview() {
                   <div className="text-[11px] leading-snug">
                     <span className="font-medium block text-[#202223]">Waitlist is clear.</span>
                     <span className="text-[#616161]">
-                      Restocked items will automatically alert customers in safe {multiplier}x batches.
+                      Restocked items will alert customers in paced {multiplier}x cohorts.
                     </span>
                   </div>
                 </div>

@@ -81,7 +81,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     senderName = "Restock Alerts",
     headline = params.headlineText || params.headline || "Your item is back in stock",
     bodyText = params.bodyText || "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-    buttonText = params.buttonText || "Claim in 1-Click Checkout →",
+    buttonText = params.buttonText || "Claim In-Stock Item →",
     buttonColor = params.buttonColor || params.accentColor || "#008060",
     subjectTemplate = params.subjectTemplate || "Back in Stock: {{product_title}} is ready to ship",
     discountCode,
@@ -118,8 +118,9 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     ? `<td width="92" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
          <img src="${cleanImageUrl}" alt="${productTitle}" style="max-width:76px;max-height:104px;width:auto;height:auto;object-fit:contain;display:block;margin:0 auto;" />
        </td>`
-    : `<td width="92" align="center" valign="middle" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 8px;color:#9ca3af;font-size:11px;font-weight:500;text-align:center;">
-         In Stock
+    : `<td width="72" align="center" valign="middle" style="background-color:#f3f4f6;border:1px dashed #d1d5db;border-radius:8px;padding:12px 6px;text-align:center;">
+         <div style="font-size:18px;line-height:1;color:#9ca3af;">📷</div>
+         <div style="font-size:10px;color:#9ca3af;font-weight:500;margin-top:4px;line-height:1.2;">No photo</div>
        </td>`;
 
   const html = `
@@ -178,7 +179,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
                       ${buttonText}
                     </a>
                     <p style="margin:12px 0 0 0;font-size:11px;color:#8c9196;text-align:center;">
-                      Inventory is reserved on a first-come, first-served basis.
+                      Inventory is available on a first-come, first-served basis. Items are not reserved until checkout is completed.
                     </p>
                   </td>
                 </tr>

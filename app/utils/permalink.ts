@@ -9,7 +9,7 @@ export function extractVariantIdNumber(variantId: string): string {
 }
 
 /**
- * Generates direct 1-Click checkout cart permalink with pre-filled customer email
+ * Generates direct checkout cart permalink with pre-filled customer email
  * and optional discount incentive.
  */
 export function generateCartPermalink({

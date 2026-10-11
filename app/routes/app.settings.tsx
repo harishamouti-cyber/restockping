@@ -4,16 +4,16 @@ import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
-import { getLiveProductMedia } from "../services/catalog.server";
+import { getAllActiveCatalogProducts, type CatalogProductOption } from "../services/catalog.server";
 import { sanitizeShopBrandName } from "../utils/brand";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [settingsRecord, liveProduct] = await Promise.all([
+  const [settingsRecord, catalogProducts] = await Promise.all([
     db.restockSettings.findUnique({ where: { shop } }),
-    getLiveProductMedia(admin),
+    getAllActiveCatalogProducts(admin),
   ]);
 
   const sanitizedDefault = sanitizeShopBrandName(shop);
@@ -28,13 +28,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
     emailHeadline: "Your item is back in stock",
     emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-    emailButtonText: "Claim in 1-Click Checkout →",
+    emailButtonText: "Claim In-Stock Item →",
     storefrontButtonText: "Notify Me When Available",
     storefrontSuccessMessage: "You're on the waitlist! We'll email you the moment stock returns.",
     storefrontButtonRadius: 6,
   };
 
-  const previewItem = liveProduct || {
+  const isSampleCatalog =
+    catalogProducts.length === 0 ||
+    catalogProducts.some((p) => p.productId.includes("sample_"));
+
+  const defaultPreview: CatalogProductOption = catalogProducts[0] || {
     productId: "sample_p1",
     variantId: "gid://shopify/ProductVariant/123456789",
     productTitle: "The Out of Stock Snowboard",
@@ -48,9 +52,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ...activeSettings,
       storeDisplayName: activeSettings.storeDisplayName || sanitizedDefault,
       incentiveDiscountCode: (activeSettings as any).incentiveDiscountCode || "",
+      emailButtonText: activeSettings.emailButtonText || "Claim In-Stock Item →",
     },
     shop,
-    previewItem,
+    previewItem: defaultPreview,
+    catalogProducts,
+    isSampleCatalog,
     defaultRecipient: "harishamouti@gmail.com",
   });
 };
@@ -79,7 +86,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
-        buttonText: String(formData.get("emailButtonText") || "Claim in 1-Click Checkout →"),
+        buttonText: String(formData.get("emailButtonText") || "Claim In-Stock Item →"),
         buttonColor: String(formData.get("accentColor") || "#008060"),
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
         discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
@@ -102,7 +109,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const emailSubjectTemplate = String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship");
   const emailHeadline = String(formData.get("emailHeadline") || "Your item is back in stock");
   const emailBodyText = String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out.");
-  const emailButtonText = String(formData.get("emailButtonText") || "Claim in 1-Click Checkout →");
+  const emailButtonText = String(formData.get("emailButtonText") || "Claim In-Stock Item →");
   const storefrontButtonText = String(formData.get("storefrontButtonText") || "Notify Me When Available");
   const storefrontSuccessMessage = String(formData.get("storefrontSuccessMessage") || "You're on the waitlist! We'll email you the moment stock returns.");
   const storefrontButtonRadius = parseInt(String(formData.get("storefrontButtonRadius")) || "6", 10);
@@ -148,18 +155,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Settings() {
-  const { settings, shop, previewItem, defaultRecipient } = useLoaderData<typeof loader>();
+  const { settings, shop, previewItem, catalogProducts, isSampleCatalog, defaultRecipient } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
 
   const [formState, setFormState] = useState(settings);
   const [testEmail, setTestEmail] = useState(defaultRecipient);
+  const [selectedPreviewVariantId, setSelectedPreviewVariantId] = useState<string>(
+    previewItem?.variantId || catalogProducts?.[0]?.variantId || ""
+  );
   const [previewTab, setPreviewTab] = useState<"email" | "storefront">("email");
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [simulatedPDPState, setSimulatedPDPState] = useState<"idle" | "subscribed">("idle");
   const [activeField, setActiveField] = useState<string>("emailSubjectTemplate");
   const [isDirty, setIsDirty] = useState(false);
+  const [imgLoadError, setImgLoadError] = useState(false);
+
+  useEffect(() => {
+    setImgLoadError(false);
+  }, [selectedPreviewVariantId]);
+
+  const activePreviewItem: CatalogProductOption =
+    (catalogProducts || []).find((p) => p.variantId === selectedPreviewVariantId) || previewItem;
 
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
 
@@ -267,12 +286,12 @@ export default function Settings() {
     fd.append("emailBodyText", formState.emailBodyText);
     fd.append("emailButtonText", formState.emailButtonText);
     fd.append("accentColor", formState.accentColor);
-    // Real catalog product parameters
-    fd.append("previewProductTitle", previewItem.productTitle);
-    fd.append("previewVariantTitle", previewItem.variantTitle);
-    fd.append("previewPrice", String(previewItem.price));
-    fd.append("previewVariantId", previewItem.variantId);
-    fd.append("previewImageUrl", previewItem.imageUrl || "");
+    // Real selected catalog product parameters
+    fd.append("previewProductTitle", activePreviewItem.productTitle);
+    fd.append("previewVariantTitle", activePreviewItem.variantTitle);
+    fd.append("previewPrice", String(activePreviewItem.price));
+    fd.append("previewVariantId", activePreviewItem.variantId);
+    fd.append("previewImageUrl", activePreviewItem.imageUrl || "");
     submit(fd, { method: "POST" });
   };
 
@@ -529,7 +548,7 @@ export default function Settings() {
                   className="w-full px-2.5 py-1.5 text-xs font-mono uppercase bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
                 />
                 <span className="text-[11px] text-[#6d7175] mt-1 block">
-                  Auto-applied to the customer's 1-click checkout cart link to boost restock conversions.
+                  Auto-applied to the customer's direct checkout cart link to boost restock conversions.
                 </span>
               </div>
             </div>
@@ -586,7 +605,7 @@ export default function Settings() {
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] space-y-3">
               <div>
                 <span className="text-xs font-semibold text-[#202223] block">Inventory Pacing & Dispatch Rules</span>
-                <p className="text-[11px] text-[#6d7175]">Control restock alert cohorts and safety margins to prevent flash-crowd overselling.</p>
+                <p className="text-[11px] text-[#6d7175]">Control restock alert cohorts and pacing intervals to prevent simultaneous store traffic spikes.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
@@ -631,6 +650,34 @@ export default function Settings() {
           {/* Right Column: Sticky Live Device & Storefront Preview */}
           <div className="lg:col-span-6 sticky top-6 self-start z-10 space-y-2.5">
             <div className="p-4 bg-white border border-[#e1e3e5] rounded-xl shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-col items-center">
+              {/* Catalog Product Selection Bar */}
+              <div className="w-full bg-[#f9fafb] border border-[#e1e3e5] rounded-lg p-2.5 mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <label className="text-[11px] font-semibold text-[#616161] shrink-0">
+                    Preview Product:
+                  </label>
+                  <select
+                    value={selectedPreviewVariantId}
+                    onChange={(e) => setSelectedPreviewVariantId(e.target.value)}
+                    className="w-full sm:w-auto flex-1 min-w-0 px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223] truncate"
+                  >
+                    {(catalogProducts || []).map((p) => (
+                      <option key={p.variantId} value={p.variantId}>
+                        {p.productTitle} — {p.variantTitle} (${p.price.toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {isSampleCatalog && (
+                  <span
+                    className="text-[10px] font-semibold bg-[#fff4e5] text-[#b98900] px-2 py-0.5 rounded border border-[#f5b854] shrink-0"
+                    title="Store catalog returned no products; displaying sample catalog"
+                  >
+                    Sample Data
+                  </span>
+                )}
+              </div>
+
               <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3">
                 {/* Primary Preview Mode Switcher */}
                 <div className="inline-flex rounded-lg bg-[#f1f2f4] p-0.5 border border-[#e1e3e5]">
@@ -718,27 +765,31 @@ export default function Settings() {
                         "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
                     </p>
 
-                    {/* Clean Product Row with Aspect-Ratio Preserving Container */}
+                    {/* Clean Product Row with Aspect-Ratio Preserving Container & Deliberate No-Image State */}
                     <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
                       <div className="w-16 h-22 bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
-                        {previewItem.imageUrl ? (
+                        {activePreviewItem.imageUrl && !imgLoadError ? (
                           <img
-                            src={previewItem.imageUrl}
-                            alt={previewItem.productTitle}
+                            src={activePreviewItem.imageUrl}
+                            alt={activePreviewItem.productTitle}
+                            onError={() => setImgLoadError(true)}
                             className="max-w-full max-h-full object-contain block mx-auto"
                           />
                         ) : (
-                          <div className="text-[10px] text-slate-400 font-medium text-center leading-tight">
-                            In Stock
+                          <div className="flex flex-col items-center justify-center text-center p-1">
+                            <span className="text-sm text-[#9ca3af]">📷</span>
+                            <span className="text-[9px] text-[#9ca3af] font-medium leading-tight mt-0.5">
+                              No image
+                            </span>
                           </div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <span className="text-xs font-semibold text-[#111827] block truncate">
-                          {previewItem.productTitle}
+                          {activePreviewItem.productTitle}
                         </span>
                         <span className="text-[11px] text-[#6b7280]">
-                          {previewItem.variantTitle} · <strong className="text-[#111827]">${previewItem.price.toFixed(2)}</strong>
+                          {activePreviewItem.variantTitle} · <strong className="text-[#111827]">${activePreviewItem.price.toFixed(2)}</strong>
                         </span>
                       </div>
                     </div>
@@ -747,7 +798,7 @@ export default function Settings() {
                       style={{ backgroundColor: formState.accentColor || "#008060" }}
                       className="w-full py-2.5 text-xs font-semibold text-white text-center rounded-md cursor-default shadow-xs transition-colors"
                     >
-                      {formState.emailButtonText || "Claim in 1-Click Checkout →"}
+                      {formState.emailButtonText || "Claim In-Stock Item →"}
                     </div>
                     {formState.incentiveDiscountCode && (
                       <div className="text-[11px] font-medium text-center text-[#008060] bg-[#e3f1df] py-1 px-2 rounded -mt-1">
@@ -755,7 +806,7 @@ export default function Settings() {
                       </div>
                     )}
                     <div className="text-[10px] text-center text-[#8c9196] -mt-1">
-                      Inventory is reserved on a first-come, first-served basis.
+                      Inventory is available on a first-come, first-served basis. Orders are not reserved until checkout is completed.
                     </div>
 
                     {/* Compliance Footer with Unsubscribe link */}
@@ -783,17 +834,17 @@ export default function Settings() {
                       {displayBrand}
                     </span>
                     <h3 className="text-base font-bold text-[#111827] mt-0.5">
-                      {previewItem.productTitle}
+                      {activePreviewItem.productTitle}
                     </h3>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-sm font-semibold text-[#111827]">
-                        ${previewItem.price.toFixed(2)}
+                        ${activePreviewItem.price.toFixed(2)}
                       </span>
                       <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded">
                         Sold out
                       </span>
                       <span className="text-[11px] text-[#6b7280]">
-                        · {previewItem.variantTitle}
+                        · {activePreviewItem.variantTitle}
                       </span>
                     </div>
                   </div>
