@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Standard Polaris & App Bridge Host Resets */
+ui-nav-menu, ui-title-bar {
+  display: none !important;
+}
+
 /* Force normal unslashed round zeros across the entire app */
 * {
   font-variant-numeric: normal !important;
