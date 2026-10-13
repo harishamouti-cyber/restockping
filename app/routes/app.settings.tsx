@@ -5,7 +5,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
 import { getAllActiveCatalogProducts, getLiveProductMedia, type CatalogProductOption } from "../services/catalog.server";
-import { sanitizeShopBrandName } from "../utils/brand";
+import { sanitizeShopBrandName, isRawDevBrand } from "../utils/brand";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -17,8 +17,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const sanitizedDefault = sanitizeShopBrandName(shop);
+
+  // Brand sanitization logic:
+  // If settingsRecord has a storeDisplayName that is empty or contains raw dev suffixes/hashes,
+  // sanitize it into clean title case (e.g. "RankPilot")
+  let effectiveStoreDisplayName = sanitizedDefault;
+  if (settingsRecord?.storeDisplayName && !isRawDevBrand(settingsRecord.storeDisplayName, shop)) {
+    effectiveStoreDisplayName = settingsRecord.storeDisplayName.trim();
+  }
+
   const activeSettings = settingsRecord || {
-    storeDisplayName: sanitizedDefault,
+    storeDisplayName: effectiveStoreDisplayName,
     dripBatchMultiplier: 2.5,
     dripIntervalMinutes: 120,
     minRestockThreshold: 1,
@@ -34,23 +43,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storefrontButtonRadius: 6,
   };
 
-  const isSampleCatalog =
-    catalogProducts.length === 0 ||
-    catalogProducts.some((p) => p.productId.includes("sample_"));
+  const isSampleCatalog = catalogProducts.length === 0;
 
-  const defaultPreview: CatalogProductOption = catalogProducts.find((product) => product.imageUrl) || catalogProducts[0] || {
-    productId: "",
-    variantId: "",
-    productTitle: "No Shopify products available",
-    variantTitle: "Add a product to preview its real image",
-    price: 0,
-    imageUrl: "",
-  };
+  // Set default selected item to the first product with a valid image (e.g. snowboard)
+  const defaultPreview: CatalogProductOption =
+    catalogProducts.find((product) => Boolean(product.imageUrl && product.imageUrl.trim())) ||
+    catalogProducts[0] || {
+      productId: "",
+      variantId: "",
+      productTitle: "No Shopify products available",
+      variantTitle: "Add a product to preview its real image",
+      price: 0,
+      imageUrl: "",
+    };
 
   return json({
     settings: {
       ...activeSettings,
-      storeDisplayName: activeSettings.storeDisplayName || sanitizedDefault,
+      storeDisplayName: effectiveStoreDisplayName,
       incentiveDiscountCode: (activeSettings as any).incentiveDiscountCode || "",
       emailButtonText: activeSettings.emailButtonText || "Claim In-Stock Item →",
     },
@@ -75,19 +85,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     try {
       const selectedVariantId = String(formData.get("previewVariantId") || "");
+      const previewTitle = String(formData.get("previewProductTitle") || "");
+      const previewVariantTitle = String(formData.get("previewVariantTitle") || "");
+      const previewPrice = parseFloat(String(formData.get("previewPrice") || "0"));
+      const previewImageUrl = String(formData.get("previewImageUrl") || "");
+
+      // Look up live product details from Admin API
       const liveProduct = selectedVariantId ? await getLiveProductMedia(admin, selectedVariantId) : null;
-      if (!liveProduct) {
-        return json({ success: false, error: "Choose a real product variant from this store before sending a test email." }, { status: 400 });
-      }
+
+      // Pass selected product data with fallback to client preview values
+      const finalProductTitle = liveProduct?.productTitle || previewTitle || "Restocked Item";
+      const finalVariantTitle = liveProduct?.variantTitle || previewVariantTitle || "Default Title";
+      const finalPrice = liveProduct?.price ?? previewPrice;
+      const finalVariantId = liveProduct?.variantId || selectedVariantId;
+      const finalImageUrl = liveProduct?.imageUrl || previewImageUrl || undefined;
+
       await sendRestockNotificationEmail({
         to: targetEmail,
         shop: session.shop,
         storeDisplayName: String(formData.get("storeDisplayName") || ""),
-        productTitle: liveProduct.productTitle,
-        variantTitle: liveProduct.variantTitle,
-        price: liveProduct.price,
-        variantId: liveProduct.variantId,
-        productImageUrl: liveProduct.imageUrl || undefined,
+        productTitle: finalProductTitle,
+        variantTitle: finalVariantTitle,
+        price: finalPrice,
+        variantId: finalVariantId,
+        productImageUrl: finalImageUrl,
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
@@ -96,7 +117,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
         discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
       });
-      return json({ success: true, message: `Test email for the selected Shopify product sent to ${targetEmail}.` });
+      return json({ success: true, message: `Test email for "${finalProductTitle}" sent to ${targetEmail}.` });
     } catch (err: any) {
       console.error("[Test Send Error]:", err);
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
@@ -310,6 +331,11 @@ export default function Settings() {
 
   const displayBrand =
     formState.storeDisplayName?.trim() || sanitizeShopBrandName(shop);
+
+  const computedSubject = (formState.emailSubjectTemplate || "Back in Stock: {{product_title}} is ready to ship")
+    .replace(/\{\{\s*product_title\s*\}\}/g, activePreviewItem.productTitle)
+    .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${activePreviewItem.price.toFixed(2)}`)
+    .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-24 font-sans text-[#202223] antialiased">
@@ -665,12 +691,16 @@ export default function Settings() {
               {/* Catalog Product Selection Bar */}
               <div className="w-full bg-[#f9fafb] border border-[#e1e3e5] rounded-lg p-2.5 mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <label className="text-[11px] font-semibold text-[#616161] shrink-0">
+                  <label htmlFor="preview-product-select" className="text-[11px] font-semibold text-[#616161] shrink-0">
                     Preview Product:
                   </label>
                   <select
+                    id="preview-product-select"
                     value={selectedPreviewVariantId}
-                    onChange={(e) => setSelectedPreviewVariantId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedPreviewVariantId(e.target.value);
+                      setImgLoadError(false);
+                    }}
                     className="w-full sm:w-auto flex-1 min-w-0 px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223] truncate"
                   >
                     {(catalogProducts || []).map((p) => (
@@ -678,10 +708,12 @@ export default function Settings() {
                         {p.productTitle} — {p.variantTitle} (${p.price.toFixed(2)})
                       </option>
                     ))}
-                    {isSampleCatalog && <option value="">No real Shopify products found</option>}
+                    {catalogProducts.length === 0 && (
+                      <option value="">No real Shopify products found</option>
+                    )}
                   </select>
                 </div>
-                {isSampleCatalog && (
+                {catalogProducts.length === 0 && (
                   <span
                     className="text-[10px] font-semibold bg-[#fff4e5] text-[#b98900] px-2 py-0.5 rounded border border-[#f5b854] shrink-0"
                     title="No real Shopify catalog products are available to preview"
@@ -690,7 +722,9 @@ export default function Settings() {
                   </span>
                 )}
               </div>
-              {isSampleCatalog ? (
+
+              {/* Warning Banner: Automatically unmounted when catalog products exist */}
+              {catalogProducts.length === 0 ? (
                 <div className="w-full text-center py-4 px-3 bg-[#fffbf2] border border-[#f5b854] rounded-lg mb-3">
                   <p className="text-xs font-semibold text-[#8a6116]">No active products found in store catalog</p>
                   <p className="text-[11px] text-[#6d7175] mt-0.5">
@@ -779,6 +813,18 @@ export default function Settings() {
                         <div className="w-1.5 h-1.5 bg-[#d4d4d8] rounded-full" />
                       </div>
                     )}
+
+                    {/* Active Email Subject Bar */}
+                    <div className="border-b border-[#f1f2f4] pb-2.5 mb-2.5">
+                      <div className="flex items-center justify-between text-[10px] text-[#8c9196] mb-1">
+                        <span className="font-semibold uppercase tracking-wider">Email Subject</span>
+                        <span>{displayBrand}</span>
+                      </div>
+                      <div className="text-xs font-semibold text-[#202223] break-words">
+                        {computedSubject}
+                      </div>
+                    </div>
+
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#e3f1df] text-[#008060] text-[10px] font-semibold uppercase rounded">
                       ● Restock Notice
                     </span>
@@ -790,35 +836,45 @@ export default function Settings() {
                         "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
                     </p>
 
-                    {/* Clean Product Row with Aspect-Ratio Preserving Container & Deliberate No-Image State */}
-                    <div className="flex items-center gap-3 p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg">
-                      <div className="w-16 h-[88px] bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-1.5 shrink-0 overflow-hidden">
+                    {/* Responsive Product Media Frame with Proportional Containment */}
+                    <div className="flex items-center gap-3.5 p-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                      <div className="w-20 h-24 sm:w-24 sm:h-28 bg-white border border-[#e5e7eb] rounded-lg flex items-center justify-center p-2 shrink-0 overflow-hidden shadow-2xs">
                         {activePreviewItem.imageUrl && !imgLoadError ? (
                           <img
                             src={activePreviewItem.imageUrl}
                             alt={activePreviewItem.productTitle}
                             onError={() => setImgLoadError(true)}
-                            className="max-w-full max-h-full object-contain block mx-auto"
+                            style={{ objectFit: "contain" }}
+                            className="w-full h-full object-contain block mx-auto transition-transform duration-200"
                           />
                         ) : (
-                          <div className="flex flex-col items-center justify-center text-center p-1">
-                            <span className="text-base text-[#9ca3af]">📷</span>
-                            <span className="text-[9px] text-[#9ca3af] font-semibold uppercase tracking-tight mt-0.5">
+                          <div className="flex flex-col items-center justify-center text-center p-2">
+                            <span className="text-xl text-[#9ca3af]">📷</span>
+                            <span className="text-[9px] text-[#9ca3af] font-semibold uppercase tracking-tight mt-1">
                               No image
                             </span>
                           </div>
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-xs font-semibold text-[#111827] block truncate">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <span className="text-sm font-semibold text-[#111827] block truncate">
                           {activePreviewItem.productTitle}
                         </span>
-                        <span className="text-[11px] text-[#6b7280] block truncate">
-                          {activePreviewItem.variantTitle} · <strong className="text-[#111827]">${activePreviewItem.price.toFixed(2)}</strong>
-                        </span>
-                        {(!activePreviewItem.imageUrl || imgLoadError) && (
-                          <span className="text-[10px] text-[#9ca3af] italic block mt-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs text-[#6b7280]">
+                            {activePreviewItem.variantTitle}
+                          </span>
+                          <span className="text-xs font-bold text-[#111827]">
+                            ${activePreviewItem.price.toFixed(2)}
+                          </span>
+                        </div>
+                        {(!activePreviewItem.imageUrl || imgLoadError) ? (
+                          <span className="text-[10px] text-[#9ca3af] italic block">
                             No photo uploaded in store catalog
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-[#008060] font-medium bg-[#e3f1df] px-1.5 py-0.5 rounded">
+                            ✓ Shopify CDN (width=300)
                           </span>
                         )}
                       </div>
@@ -858,24 +914,44 @@ export default function Settings() {
               ) : (
                 /* Storefront Dawn Theme PDP Card Preview */
                 <div className="w-full max-w-[480px] bg-white border border-[#e1e3e5] rounded-xl p-5 shadow-xs space-y-4">
-                  {/* Dawn Mock Header */}
-                  <div className="border-b border-[#f1f2f4] pb-3">
-                    <span className="text-[10px] font-medium text-[#6d7175]">
-                      {displayBrand}
-                    </span>
-                    <h3 className="text-base font-bold text-[#111827] mt-0.5">
-                      {activePreviewItem.productTitle}
-                    </h3>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-sm font-semibold text-[#111827]">
-                        ${activePreviewItem.price.toFixed(2)}
+                  {/* Dawn Mock Header with Product Visual */}
+                  <div className="border-b border-[#f1f2f4] pb-4 flex gap-4 items-start">
+                    <div className="w-20 h-24 sm:w-24 sm:h-28 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg flex items-center justify-center p-2 shrink-0 overflow-hidden shadow-2xs">
+                      {activePreviewItem.imageUrl && !imgLoadError ? (
+                        <img
+                          src={activePreviewItem.imageUrl}
+                          alt={activePreviewItem.productTitle}
+                          onError={() => setImgLoadError(true)}
+                          style={{ objectFit: "contain" }}
+                          className="w-full h-full object-contain block mx-auto"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-center p-2">
+                          <span className="text-xl text-[#9ca3af]">📷</span>
+                          <span className="text-[9px] text-[#9ca3af] font-semibold uppercase tracking-tight mt-1">
+                            No image
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-medium text-[#6d7175] uppercase tracking-wide block">
+                        {displayBrand}
                       </span>
-                      <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded">
-                        Sold out
-                      </span>
-                      <span className="text-[11px] text-[#6b7280]">
-                        · {activePreviewItem.variantTitle}
-                      </span>
+                      <h3 className="text-base font-bold text-[#111827] mt-0.5 leading-snug break-words">
+                        {activePreviewItem.productTitle}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className="text-sm font-semibold text-[#111827]">
+                          ${activePreviewItem.price.toFixed(2)}
+                        </span>
+                        <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded">
+                          Sold out
+                        </span>
+                        <span className="text-[11px] text-[#6b7280]">
+                          · {activePreviewItem.variantTitle}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

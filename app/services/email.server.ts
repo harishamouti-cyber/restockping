@@ -114,7 +114,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${price.toFixed(2)}`)
     .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
 
-  const normalized = normalizeShopifyImageUrl(cleanImageUrl, shop, 400);
+  const normalized = normalizeShopifyImageUrl(cleanImageUrl, shop, 300);
   const safeImageUrl = normalized.isValid ? normalized.url : "";
   const imageHtml = safeImageUrl
     ? `<td width="92" align="center" valign="middle" style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">

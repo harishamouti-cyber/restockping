@@ -31,7 +31,7 @@ export interface CatalogProductOption {
 export function normalizeShopifyImageUrl(
   rawUrl?: string | null,
   shop?: string,
-  width = 400
+  width = 300
 ): { url: string; isValid: boolean; reason?: string } {
   if (!rawUrl || typeof rawUrl !== "string") {
     return { url: "", isValid: false, reason: "No image URL provided" };
@@ -64,13 +64,15 @@ export function normalizeShopifyImageUrl(
       host.endsWith(".cdn.shopify.com") ||
       host === "cdn.shopifycloud.com" ||
       host.endsWith(".shopifycloud.com") ||
-      host.endsWith(".myshopify.com");
+      host.endsWith(".myshopify.com") ||
+      host === "shopify.com" ||
+      host.endsWith(".shopify.com");
 
     if (!isShopifyHost) {
       return { url: "", isValid: false, reason: `Host ${host} is not a recognized Shopify CDN host` };
     }
 
-    if (width > 0 && !parsed.searchParams.has("width")) {
+    if (width > 0) {
       parsed.searchParams.set("width", String(width));
     }
 
@@ -80,7 +82,7 @@ export function normalizeShopifyImageUrl(
   }
 }
 
-export function formatShopifyImageUrl(rawUrl?: string | null, width = 400, shop?: string): string {
+export function formatShopifyImageUrl(rawUrl?: string | null, width = 300, shop?: string): string {
   const norm = normalizeShopifyImageUrl(rawUrl, shop, width);
   return norm.isValid ? norm.url : "";
 }
@@ -138,7 +140,7 @@ export async function getLiveProductMedia(
                 url
                 altText
               }
-              media(first: 10) {
+              media(first: 5) {
                 nodes {
                   ... on MediaImage {
                     image {
@@ -171,8 +173,14 @@ export async function getLiveProductMedia(
 
         const json = await response.json();
         if (json.errors && json.errors.length > 0) {
+          for (const err of json.errors) {
+            console.error(
+              `[GraphQL Variant Media Error for ${formattedVariantId}]: message="${err.message}", path=${JSON.stringify(
+                err.path || []
+              )}`
+            );
+          }
           const errMsg = json.errors.map((e: any) => e.message).join("; ");
-          console.error(`[GraphQL Variant Media Error for ${formattedVariantId}]:`, errMsg);
           return {
             productId: productId || "",
             variantId: formattedVariantId,
@@ -209,7 +217,7 @@ export async function getLiveProductMedia(
             }
           }
 
-          const normalized = normalizeShopifyImageUrl(rawUrl, shopDomain, 400);
+          const normalized = normalizeShopifyImageUrl(rawUrl, shopDomain, 300);
 
           return {
             productId: variant.product?.id || productId || "",
@@ -260,7 +268,7 @@ export async function getLiveProductMedia(
               url
               altText
             }
-            media(first: 10) {
+            media(first: 5) {
               nodes {
                 ... on MediaImage {
                   image {
@@ -302,8 +310,14 @@ export async function getLiveProductMedia(
 
         const json = await response.json();
         if (json.errors && json.errors.length > 0) {
+          for (const err of json.errors) {
+            console.error(
+              `[GraphQL Product Media Error for ${formattedProductId}]: message="${err.message}", path=${JSON.stringify(
+                err.path || []
+              )}`
+            );
+          }
           const errMsg = json.errors.map((e: any) => e.message).join("; ");
-          console.error(`[GraphQL Product Media Error for ${formattedProductId}]:`, errMsg);
           return {
             productId: formattedProductId,
             variantId: variantId || "",
@@ -333,7 +347,7 @@ export async function getLiveProductMedia(
             }
           }
 
-          const normalized = normalizeShopifyImageUrl(rawUrl, shopDomain, 400);
+          const normalized = normalizeShopifyImageUrl(rawUrl, shopDomain, 300);
 
           return {
             productId: prod.id,
@@ -368,22 +382,29 @@ export async function getLiveProductMedia(
 }
 
 /**
- * Fetches all active catalog products and their variants for simulator and settings preview.
- * Resolves variant image -> product featuredImage -> media nodes.
+ * Fetches the first twenty catalog products directly to capture all store inventory.
+ * Removes rigid search filters (e.g. status:active) to avoid indexing lag or draft omissions.
+ * Resolves media hierarchically: variant image -> featured image -> media nodes -> fallback.
+ * Formats all media URLs with Shopify CDN width=300 transform parameter.
  */
 export async function getAllActiveCatalogProducts(
   admin: AdminApiContext | any
 ): Promise<CatalogProductOption[]> {
+  if (!admin) {
+    console.warn("[GraphQL GetAllCatalogProducts]: Admin API context is undefined.");
+    return [];
+  }
+
   const query = `#graphql
     query getAllCatalogProducts {
-      products(first: 30, query: "status:active") {
+      products(first: 20) {
         nodes {
           id
           title
           featuredImage {
             url
           }
-          media(first: 10) {
+          media(first: 5) {
             nodes {
               ... on MediaImage {
                 image {
@@ -409,25 +430,55 @@ export async function getAllActiveCatalogProducts(
 
   try {
     const response = await admin.graphql(query);
-    const json = await response.json();
-    const products = json.data?.products?.nodes || [];
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      console.error(
+        `[GraphQL GetAllCatalogProducts HTTP Error]: status=${response.status} ${response.statusText}`,
+        errorText
+      );
+    }
 
+    const json = await response.json();
+    if (json.errors && json.errors.length > 0) {
+      for (const err of json.errors) {
+        console.error(
+          `[GraphQL GetAllCatalogProducts Error]: message="${err.message}", path=${JSON.stringify(
+            err.path || []
+          )}, extensions=${JSON.stringify(err.extensions || {})}`
+        );
+      }
+    }
+
+    const products = json.data?.products?.nodes || [];
     const options: CatalogProductOption[] = [];
 
     for (const prod of products) {
-      let prodMediaUrl = prod.featuredImage?.url;
-      if (!prodMediaUrl && prod.media?.nodes) {
+      // 1. Check primary product featured image
+      let productFallbackUrl = prod.featuredImage?.url || null;
+
+      // 2. Check first 5 items under media connection (MediaImage)
+      if (!productFallbackUrl && prod.media?.nodes) {
         for (const node of prod.media.nodes) {
           if (node?.image?.url) {
-            prodMediaUrl = node.image.url;
+            productFallbackUrl = node.image.url;
             break;
           }
         }
       }
 
+      // 3. Check variant images on product
       const variants = prod.variants?.nodes || [];
+      if (!productFallbackUrl && variants.length > 0) {
+        for (const v of variants) {
+          if (v.image?.url) {
+            productFallbackUrl = v.image.url;
+            break;
+          }
+        }
+      }
+
       if (variants.length === 0) {
-        const norm = normalizeShopifyImageUrl(prodMediaUrl, undefined, 400);
+        const norm = normalizeShopifyImageUrl(productFallbackUrl, undefined, 300);
         options.push({
           productId: prod.id,
           variantId: `gid://shopify/ProductVariant/${prod.id.replace(/\D/g, "")}_default`,
@@ -438,8 +489,21 @@ export async function getAllActiveCatalogProducts(
         });
       } else {
         for (const v of variants) {
-          const rawUrl = v.image?.url || prodMediaUrl;
-          const norm = normalizeShopifyImageUrl(rawUrl, undefined, 400);
+          // Priority: Variant image -> Featured image -> First media image -> Product fallback
+          let rawUrl = v.image?.url || prod.featuredImage?.url || null;
+          if (!rawUrl && prod.media?.nodes) {
+            for (const node of prod.media.nodes) {
+              if (node?.image?.url) {
+                rawUrl = node.image.url;
+                break;
+              }
+            }
+          }
+          if (!rawUrl) {
+            rawUrl = productFallbackUrl;
+          }
+
+          const norm = normalizeShopifyImageUrl(rawUrl, undefined, 300);
           options.push({
             productId: prod.id,
             variantId: v.id,
@@ -455,8 +519,8 @@ export async function getAllActiveCatalogProducts(
     if (options.length > 0) {
       return options;
     }
-  } catch (err) {
-    console.error("[GraphQL GetAllCatalogProducts Error]:", err);
+  } catch (err: any) {
+    console.error("[GraphQL GetAllCatalogProducts Exception]:", err?.message || err);
   }
 
   // Explicit empty array when store has no products; callers render empty state
