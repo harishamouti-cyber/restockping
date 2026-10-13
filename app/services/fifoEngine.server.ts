@@ -272,6 +272,23 @@ export async function processInventoryRestock({
     const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
     const imageLookupError = liveMedia?.imageLookupError || null;
 
+    // Atomically claim the subscription to prevent concurrent double-dispatch
+    const claimResult = await db.restockSubscription.updateMany({
+      where: {
+        id: sub.id,
+        shop,
+        status: "PENDING",
+      },
+      data: {
+        status: "QUEUED",
+      },
+    });
+
+    if (claimResult.count === 0) {
+      // Already claimed by a concurrent worker or manual dispatch
+      continue;
+    }
+
     try {
       await sendRestockNotificationEmail({
         to: sub.customerEmail,
@@ -293,14 +310,19 @@ export async function processInventoryRestock({
         subscriptionId: sub.id,
       });
 
-      await db.restockSubscription.update({
-        where: { id: sub.id },
+      await db.restockSubscription.updateMany({
+        where: { id: sub.id, shop },
         data: { status: "DISPATCHED", dispatchedAt: new Date() },
       });
 
       sent++;
     } catch (err) {
       console.error(`[Webhook Auto-Dispatch Error for ${sub.customerEmail}]:`, err);
+      // Revert QUEUED status back to PENDING on error so request is not lost
+      await db.restockSubscription.updateMany({
+        where: { id: sub.id, shop, status: "QUEUED" },
+        data: { status: "PENDING" },
+      });
     }
   }
 

@@ -1,39 +1,28 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
-import { processInventoryRestock } from "../services/fifoEngine.server";
-
-// In-memory deduplication cache for webhook deliveries (15 minute TTL)
-const processedWebhooks = new Map<string, number>();
-const WEBHOOK_TTL_MS = 15 * 60 * 1000;
-
-function isDuplicateWebhook(webhookId: string | null): boolean {
-  if (!webhookId) return false;
-  const now = Date.now();
-  // Prune expired entries
-  for (const [id, timestamp] of processedWebhooks.entries()) {
-    if (now - timestamp > WEBHOOK_TTL_MS) {
-      processedWebhooks.delete(id);
-    }
-  }
-  if (processedWebhooks.has(webhookId)) {
-    return true;
-  }
-  processedWebhooks.set(webhookId, now);
-  return false;
-}
+import {
+  recordWebhookEvent,
+  enqueueInventoryRestock,
+  processPendingRestockJobs,
+} from "../services/restockQueue.server";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const webhookId = request.headers.get("x-shopify-webhook-id");
-  if (webhookId && isDuplicateWebhook(webhookId)) {
-    console.log(`[Webhook Ignored: Duplicate delivery] Webhook ID: ${webhookId}`);
-    return new Response("Duplicate webhook delivery ignored", { status: 200 });
-  }
-
+  // Authenticate webhook HMAC signature using official Shopify Remix authenticate
   const { topic, shop, session, admin, payload } = await authenticate.webhook(request);
 
   if (!shop) {
     return new Response("Missing shop header", { status: 400 });
+  }
+
+  // Durable idempotency check using database table WebhookEvent
+  const webhookId = request.headers.get("x-shopify-webhook-id") || "";
+  if (webhookId) {
+    const { isDuplicate } = await recordWebhookEvent(webhookId, shop, topic);
+    if (isDuplicate) {
+      console.log(`[Durable Webhook Dedup] Duplicate delivery ignored: ID ${webhookId} for shop ${shop}`);
+      return new Response("Duplicate webhook delivery ignored", { status: 200 });
+    }
   }
 
   console.log(`[Webhook Received] Topic: ${topic} for Shop: ${shop}`);
@@ -44,32 +33,46 @@ export async function action({ request }: ActionFunctionArgs) {
       const inventoryItemId = rawId.startsWith("gid://shopify/InventoryItem/")
         ? rawId
         : `gid://shopify/InventoryItem/${rawId}`;
+      const locationId = payload.location_id ? String(payload.location_id) : null;
       const available = Number(payload.available ?? payload.availableUnits ?? 0);
 
-      const result = await processInventoryRestock({
+      // Enqueue work into durable queue and return promptly to Shopify
+      const enqueueResult = await enqueueInventoryRestock({
         shop,
         inventoryItemId,
-        newAvailableQuantity: available,
-        admin,
+        locationId,
+        availableQuantity: available,
       });
 
       console.log(
-        `[Inventory Restock Email Processing Completed] Shop: ${shop} | Dispatched: ${result.processed}`
+        `[Inventory Webhook Enqueued] Shop: ${shop} | Item: ${inventoryItemId} | Result:`,
+        enqueueResult
       );
 
+      // If scheduled for immediate execution, trigger background processing without blocking webhook response
+      if (enqueueResult.enqueued && enqueueResult.jobId) {
+        // Fire-and-forget worker execution
+        processPendingRestockJobs({ jobId: enqueueResult.jobId, admin }).catch((err) => {
+          console.error("[Background Restock Worker Error]:", err);
+        });
+      }
+
+      // Return promptly (<200ms) to prevent Shopify webhook timeouts
       return new Response(null, { status: 200 });
     }
 
     case "APP_UNINSTALLED": {
-      console.log(`[App Uninstalled] Cleaning active sessions for shop: ${shop}`);
+      console.log(`[App Uninstalled] Cleaning active sessions and pending jobs for shop: ${shop}`);
       await db.session.deleteMany({ where: { shop } });
+      await db.restockJob.deleteMany({ where: { shop, status: "PENDING" } });
       return new Response(null, { status: 200 });
     }
 
-    // MANDATORY GDPR COMPLIANCE WEBHOOKS
+    // MANDATORY GDPR & PRIVACY COMPLIANCE WEBHOOKS
     case "CUSTOMERS_DATA_REQUEST": {
-      const customerEmail = payload.customer?.email;
-      console.log(`[GDPR Data Request] for customer: ${customerEmail}`);
+      const customerEmail = payload.customer?.email?.toLowerCase().trim();
+      const customerPhone = payload.customer?.phone;
+      console.log(`[GDPR Data Request] for customer: ${customerEmail || customerPhone} in shop: ${shop}`);
 
       const userSubscriptions = customerEmail
         ? await db.restockSubscription.findMany({
@@ -84,8 +87,8 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     case "CUSTOMERS_REDACT": {
-      const customerEmail = payload.customer?.email;
-      console.log(`[GDPR Customers Redact] Redacting data for: ${customerEmail}`);
+      const customerEmail = payload.customer?.email?.toLowerCase().trim();
+      console.log(`[GDPR Customers Redact] Redacting data for: ${customerEmail} in shop: ${shop}`);
       if (customerEmail) {
         await db.restockSubscription.deleteMany({
           where: { shop, customerEmail },
@@ -100,6 +103,9 @@ export async function action({ request }: ActionFunctionArgs) {
       await db.inventoryItemMapping.deleteMany({ where: { shop } });
       await db.restockSettings.deleteMany({ where: { shop } });
       await db.session.deleteMany({ where: { shop } });
+      await db.restockJob.deleteMany({ where: { shop } });
+      await db.webhookEvent.deleteMany({ where: { shop } });
+      await db.inventoryLocationState.deleteMany({ where: { shop } });
       return new Response(null, { status: 200 });
     }
 

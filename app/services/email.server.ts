@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { normalizeShopifyImageUrl } from "./catalog.server";
 import { sanitizeShopBrandName } from "../utils/brand";
+import { generateUnsubscribeToken } from "./unsubscribeToken.server";
 import {
   renderHtmlEmail,
   renderPlainTextEmail,
@@ -125,8 +126,14 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     ? `https://${shop}/cart/${cleanVariantId}:1?checkout[email]=${encodeURIComponent(to)}${discountParam}`
     : `https://${shop}${discountParam ? `?${discountParam.slice(1)}` : ""}`;
   const displayBrand = sanitizeShopBrandName(shop, storeDisplayName);
-  const subParam = subscriptionId ? `&id=${encodeURIComponent(subscriptionId)}` : "";
-  const unsubscribeUrl = `https://${shop}/apps/restockping/unsubscribe?email=${encodeURIComponent(to)}&variant=${cleanVariantId}${subParam}`;
+
+  // Generate cryptographically signed, tenant-scoped unsubscribe token
+  const unsubscribeToken = generateUnsubscribeToken({
+    subscriptionId: subscriptionId || "preview",
+    shop,
+    email: to,
+  });
+  const unsubscribeUrl = `https://${shop}/apps/restockping/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
 
   const normalized = normalizeShopifyImageUrl(cleanImageUrl, shop, 300);
   const safeImageUrl = normalized.isValid ? normalized.url : "";
@@ -174,6 +181,10 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
       subject: copy.subject,
       text,
       html,
+      headers: {
+        "List-Unsubscribe": `<${unsubscribeUrl}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      },
     });
   } catch (err: any) {
     console.error(`[RestockPing SMTP Send Error] Failed delivering to ${to}:`, err.message || err);

@@ -77,3 +77,57 @@ model RestockSubscription {
   @@index([shop, inventoryItemId, status])
   @@index([shop, customerEmail])
 }
+
+model WebhookEvent {
+  id        String   @id // x-shopify-webhook-id
+  shop      String
+  topic     String
+  status    String   @default("RECEIVED") // RECEIVED | PROCESSING | COMPLETED | FAILED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop, topic])
+  @@index([createdAt])
+}
+
+model RestockJob {
+  id                String    @id @default(uuid())
+  shop              String
+  inventoryItemId   String
+  locationId        String?
+  availableQuantity Int
+  status            String    @default("PENDING") // PENDING | PROCESSING | COMPLETED | SKIPPED | FAILED
+  processedCount    Int       @default(0)
+  scheduledFor      DateTime  @default(now())
+  lockedAt          DateTime?
+  completedAt       DateTime?
+  error             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([shop, inventoryItemId, status])
+  @@index([status, scheduledFor])
+}
+
+model InventoryLocationState {
+  id               String    @id @default(uuid())
+  shop             String
+  inventoryItemId  String
+  locationId       String    @default("ALL")
+  lastAvailable    Int       @default(0)
+  lastDispatchedAt DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([shop, inventoryItemId, locationId])
+}
+
+model RateLimitRecord {
+  key       String   @id // e.g. "subscribe:1.2.3.4" or "subscribe:shop:email"
+  count     Int      @default(1)
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+

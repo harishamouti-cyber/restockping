@@ -1,12 +1,39 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import crypto from "crypto";
 import prisma from "../db.server";
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret");
+function isAuthorized(request: Request): boolean {
+  const configuredSecret = process.env.SETUP_DB_SECRET;
+  if (!configuredSecret) {
+    // If no secret configured in environment, completely disable this route
+    return false;
+  }
 
-  // Basic guard (or allow setup)
+  const url = new URL(request.url);
+  const providedSecret =
+    url.searchParams.get("secret") ||
+    request.headers.get("x-setup-secret") ||
+    "";
+
+  if (!providedSecret) return false;
+
+  try {
+    const a = Buffer.from(providedSecret);
+    const b = Buffer.from(configuredSecret);
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  // Reject unauthorized requests with 404 so endpoint existence is concealed
+  if (!isAuthorized(request)) {
+    return new Response("Not Found", { status: 404 });
+  }
+
   try {
     const statements = [
       `CREATE TABLE IF NOT EXISTS "Session" (
@@ -66,6 +93,50 @@ export async function loader({ request }: LoaderFunctionArgs) {
       `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_variantId_status_idx" ON "RestockSubscription"("shop", "variantId", "status")`,
       `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_inventoryItemId_status_idx" ON "RestockSubscription"("shop", "inventoryItemId", "status")`,
       `CREATE INDEX IF NOT EXISTS "RestockSubscription_shop_customerEmail_idx" ON "RestockSubscription"("shop", "customerEmail")`,
+      `CREATE TABLE IF NOT EXISTS "WebhookEvent" (
+        "id" TEXT PRIMARY KEY,
+        "shop" TEXT NOT NULL,
+        "topic" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'RECEIVED',
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS "WebhookEvent_shop_topic_idx" ON "WebhookEvent"("shop", "topic")`,
+      `CREATE TABLE IF NOT EXISTS "RestockJob" (
+        "id" TEXT PRIMARY KEY,
+        "shop" TEXT NOT NULL,
+        "inventoryItemId" TEXT NOT NULL,
+        "locationId" TEXT,
+        "availableQuantity" INTEGER NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'PENDING',
+        "processedCount" INTEGER NOT NULL DEFAULT 0,
+        "scheduledFor" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "lockedAt" TIMESTAMP(3),
+        "completedAt" TIMESTAMP(3),
+        "error" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS "RestockJob_shop_inventoryItemId_status_idx" ON "RestockJob"("shop", "inventoryItemId", "status")`,
+      `CREATE INDEX IF NOT EXISTS "RestockJob_status_scheduledFor_idx" ON "RestockJob"("status", "scheduledFor")`,
+      `CREATE TABLE IF NOT EXISTS "InventoryLocationState" (
+        "id" TEXT PRIMARY KEY,
+        "shop" TEXT NOT NULL,
+        "inventoryItemId" TEXT NOT NULL,
+        "locationId" TEXT NOT NULL DEFAULT 'ALL',
+        "lastAvailable" INTEGER NOT NULL DEFAULT 0,
+        "lastDispatchedAt" TIMESTAMP(3),
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "InventoryLocationState_shop_inventoryItemId_locationId_key" UNIQUE ("shop", "inventoryItemId", "locationId")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "RateLimitRecord" (
+        "key" TEXT PRIMARY KEY,
+        "count" INTEGER NOT NULL DEFAULT 1,
+        "resetAt" TIMESTAMP(3) NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS "RateLimitRecord_resetAt_idx" ON "RateLimitRecord"("resetAt")`,
       `ALTER TABLE "RestockSubscription" ADD COLUMN IF NOT EXISTS "productImageUrl" TEXT`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "storeDisplayName" TEXT DEFAULT ''`,
       `ALTER TABLE "RestockSettings" ADD COLUMN IF NOT EXISTS "emailHeadline" TEXT NOT NULL DEFAULT 'Your item is back in stock'`,
@@ -80,29 +151,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
       await prisma.$executeRawUnsafe(sql);
     }
 
-    // Verify all tables by counting
-    const sessionCount = await prisma.session.count();
-    const settingsCount = await prisma.restockSettings.count();
-    const mappingCount = await prisma.inventoryItemMapping.count();
-    const subCount = await prisma.restockSubscription.count();
-
+    // Never return table counts or schema internals to the client
     return json({
       status: "SUCCESS",
-      message: "All database tables are synchronized and active.",
-      tables: {
-        sessionCount,
-        settingsCount,
-        mappingCount,
-        subCount,
-      },
+      message: "Database schema synchronized successfully.",
     });
-
   } catch (error: unknown) {
-    const err = error as Error;
+    console.error("[Database Setup Error]:", error);
     return json(
       {
         status: "ERROR",
-        message: err.message || "Database synchronization failed",
+        message: "Failed to apply database migrations.",
       },
       { status: 500 }
     );

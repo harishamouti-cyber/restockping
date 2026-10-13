@@ -157,13 +157,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "DISPATCH_SINGLE") {
     const id = String(formData.get("id"));
-    const subscriber = await db.restockSubscription.findUnique({ where: { id } });
+    const subscriber = await db.restockSubscription.findFirst({
+      where: { id, shop: session.shop },
+    });
 
     if (!subscriber || !subscriber.customerEmail) {
-      return json({ success: false, error: "Subscriber not found or missing email." }, { status: 404 });
+      return json({ success: false, error: "Subscriber not found or does not belong to this store." }, { status: 404 });
     }
 
     try {
+      // Atomically claim the subscription to prevent race conditions
+      await db.restockSubscription.updateMany({
+        where: { id, shop: session.shop, status: "PENDING" },
+        data: { status: "QUEUED" },
+      });
+
       let liveMedia = null;
       try {
         liveMedia = await getLiveProductMedia(admin, subscriber.variantId, subscriber.productId);
@@ -205,8 +213,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         subscriptionId: subscriber.id,
       });
 
-      await db.restockSubscription.update({
-        where: { id },
+      await db.restockSubscription.updateMany({
+        where: { id, shop: session.shop },
         data: {
           status: "DISPATCHED",
           dispatchedAt: new Date(),
@@ -217,6 +225,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ success: true, message: `Alert email delivered to ${subscriber.customerEmail}!` });
     } catch (err: any) {
       console.error("[Single Dispatch Error]:", err);
+      // Revert QUEUED state back to PENDING on error
+      await db.restockSubscription.updateMany({
+        where: { id, shop: session.shop, status: "QUEUED" },
+        data: { status: "PENDING" },
+      });
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
     }
   }
@@ -233,6 +246,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     for (const sub of subscribers) {
       if (!sub.customerEmail) continue;
+
+      // Atomically claim the subscription to prevent concurrent double-dispatch
+      const claimResult = await db.restockSubscription.updateMany({
+        where: { id: sub.id, shop: session.shop, status: "PENDING" },
+        data: { status: "QUEUED" },
+      });
+      if (claimResult.count === 0) continue;
+
       try {
         let liveMedia = null;
         try {
@@ -278,8 +299,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           subscriptionId: sub.id,
         });
 
-        await db.restockSubscription.update({
-          where: { id: sub.id },
+        await db.restockSubscription.updateMany({
+          where: { id: sub.id, shop: session.shop },
           data: {
             status: "DISPATCHED",
             dispatchedAt: new Date(),
@@ -290,6 +311,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         deliveredCount++;
       } catch (err) {
         failedCount++;
+        await db.restockSubscription.updateMany({
+          where: { id: sub.id, shop: session.shop, status: "QUEUED" },
+          data: { status: "PENDING" },
+        });
       }
     }
 
