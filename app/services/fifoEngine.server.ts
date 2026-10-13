@@ -1,6 +1,12 @@
 import db from "../db.server";
-import { sendRestockNotificationEmail } from "./email.server";
+import {
+  sendRestockNotificationEmail,
+  SuppressedEmailError,
+  HardBounceError,
+  QuotaExceededError,
+} from "./email.server";
 import { getLiveProductMedia, normalizeShopifyImageUrl, type ResolvedProductMedia } from "./catalog.server";
+import { emitRestockFlowTrigger } from "./flowEmitter.server";
 
 export interface MetricCalculations {
   totalRegistered: number;
@@ -38,10 +44,10 @@ export function calculateConversionMetrics(subscribers: any[]): MetricCalculatio
     return {
       totalRegistered,
       pendingCount,
-      dispatchedCount: 0,
+      dispatchedCount, // Retain real dispatched count even when convertedCount is 0
       convertedCount: 0,
       ctrPercentage: "0.0",
-      ctrBadgeLabel: `${dispatchedCount} Sent (Awaiting Order)`,
+      ctrBadgeLabel: `${dispatchedCount} Sent (Awaiting Orders)`,
       isCtrActive: true,
       hasOrders: false,
     };
@@ -96,19 +102,72 @@ export function calculateVelocityMetrics(subscribers: any[]) {
 }
 
 /**
+ * Checks the live inventory level in Shopify for an inventory item.
+ * Returns the summed available quantity across active inventory levels.
+ */
+async function fetchLiveInventoryQuantity(
+  admin: any,
+  inventoryItemIdGid: string
+): Promise<number | null> {
+  if (!admin || typeof admin.graphql !== "function") return null;
+
+  try {
+    const query = `#graphql
+      query getLiveInventoryItem($id: ID!) {
+        inventoryItem(id: $id) {
+          id
+          inventoryLevels(first: 20) {
+            nodes {
+              quantities(names: ["available"]) {
+                name
+                quantity
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await admin.graphql(query, { variables: { id: inventoryItemIdGid } });
+    const json = await response.json();
+    const nodes = json.data?.inventoryItem?.inventoryLevels?.nodes;
+
+    if (!Array.isArray(nodes)) return null;
+
+    let totalAvailable = 0;
+    for (const level of nodes) {
+      const avail = level.quantities?.find((q: any) => q.name === "available");
+      if (avail && typeof avail.quantity === "number") {
+        totalAvailable += avail.quantity;
+      }
+    }
+    return totalAvailable;
+  } catch (err) {
+    console.warn("[Live Inventory Check Error]:", err);
+    return null;
+  }
+}
+
+/**
  * Autonomous FIFO restock dispatch engine.
- * Dispatches transactional restock emails directly via nodemailer to the calculated cohort.
+ * Dispatches transactional restock emails to the calculated cohort.
+ * - Verifies real-time inventory before dispatch.
+ * - Enforces pacing multiplier & cooldown.
+ * - Emits Shopify Flow trigger.
+ * - Tracks provider response & delivery state.
  */
 export async function processInventoryRestock({
   shop,
   inventoryItemId,
   newAvailableQuantity,
   admin,
+  batchNumber = 1,
 }: {
   shop: string;
   inventoryItemId: string;
   newAvailableQuantity: number;
   admin?: any;
+  batchNumber?: number;
 }) {
   const settings = (await db.restockSettings.findUnique({ where: { shop } })) || {
     dripBatchMultiplier: 2.5,
@@ -119,16 +178,36 @@ export async function processInventoryRestock({
     emailHeadline: "Your item is back in stock",
     emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
     emailButtonText: "Claim In-Stock Item →",
+    incentiveDiscountCode: null,
+    storeDisplayName: null,
   };
 
-  if (newAvailableQuantity < (settings.minRestockThreshold || 1)) {
-    return { processed: 0, reason: "Restocked units below minimum threshold" };
-  }
-
+  const minThreshold = settings.minRestockThreshold || 1;
   const rawId = inventoryItemId.replace(/\D/g, "");
   const gid = `gid://shopify/InventoryItem/${rawId}`;
 
-  // 1. Resolve inventory item to variant via mapping table or Shopify Admin GraphQL API
+  // 1. VERIFY REAL-TIME INVENTORY WITH SHOPIFY BEFORE DISPATCH (Requirement 2)
+  let effectiveAvailable = newAvailableQuantity;
+  if (admin) {
+    const liveAvailable = await fetchLiveInventoryQuantity(admin, gid);
+    if (liveAvailable !== null) {
+      effectiveAvailable = liveAvailable;
+      console.log(
+        `[Inventory Pre-Dispatch Check] Verified live available inventory for ${gid}: ${liveAvailable} (webhook payload was ${newAvailableQuantity})`
+      );
+    }
+  }
+
+  if (effectiveAvailable < minThreshold) {
+    return {
+      processed: 0,
+      reason: `Available units (${effectiveAvailable}) below minimum threshold (${minThreshold}). Dispatch aborted.`,
+      skippedDueToInventory: true,
+      remainingPending: 0,
+    };
+  }
+
+  // 2. Resolve inventory item to variant via mapping table or Shopify Admin GraphQL API
   let resolvedVariantId: string | null = null;
 
   const existingMapping = await db.inventoryItemMapping.findFirst({
@@ -175,7 +254,6 @@ export async function processInventoryRestock({
         const resolvedProductId = item.variant.product?.id || "";
         const resolvedSku = item.sku || null;
 
-        // Persist mapping for rapid subsequent lookups
         await db.inventoryItemMapping.upsert({
           where: { inventoryItemId: gid },
           update: {
@@ -193,7 +271,6 @@ export async function processInventoryRestock({
           },
         });
 
-        // Backfill placeholder mapped_ variant records to real Shopify InventoryItem GID
         await db.restockSubscription.updateMany({
           where: {
             shop,
@@ -210,7 +287,7 @@ export async function processInventoryRestock({
     }
   }
 
-  // 2. Query ONLY pending waitlist subscribers for this specific replenished variant/item
+  // 3. Query pending waitlist subscribers for this item
   const pendingSubscribers = await db.restockSubscription.findMany({
     where: {
       shop,
@@ -225,23 +302,24 @@ export async function processInventoryRestock({
     orderBy: { createdAt: "asc" },
   });
 
-  // CRITICAL SAFETY POLICY: If no subscribers are waiting for THIS product, exit cleanly.
-  // Never fall back to querying or emailing unrelated subscribers across the store!
   if (pendingSubscribers.length === 0) {
-    return { processed: 0, reason: "No pending waitlist requests for this item" };
+    return { processed: 0, reason: "No pending waitlist requests for this item", remainingPending: 0 };
   }
 
-  // 3. Pacing Cohort Calculation:
-  // Multiplier >= 1.0 (1.0 = strict 1:1, > 1.0 = paced over-notification cohort)
+  // 4. Pacing Cohort Calculation
   const multiplier = Math.max(1.0, Number(settings.dripBatchMultiplier) || 2.5);
   const targetBatchSize = Math.min(
-    Math.round(newAvailableQuantity * multiplier),
+    Math.round(effectiveAvailable * multiplier),
     pendingSubscribers.length
   );
 
   const cohort = pendingSubscribers.slice(0, targetBatchSize);
   const liveMediaByVariant = new Map<string, ResolvedProductMedia | null>();
+
   let sent = 0;
+  let bouncedCount = 0;
+  let suppressedCount = 0;
+  let quotaErrorOccurred = false;
 
   for (const sub of cohort) {
     if (!sub.customerEmail) continue;
@@ -281,16 +359,17 @@ export async function processInventoryRestock({
       },
       data: {
         status: "QUEUED",
+        lastAttemptedAt: new Date(),
+        attemptCount: { increment: 1 },
       },
     });
 
     if (claimResult.count === 0) {
-      // Already claimed by a concurrent worker or manual dispatch
       continue;
     }
 
     try {
-      await sendRestockNotificationEmail({
+      const emailResult = await sendRestockNotificationEmail({
         to: sub.customerEmail,
         shop,
         productTitle: resolvedTitle,
@@ -310,28 +389,92 @@ export async function processInventoryRestock({
         subscriptionId: sub.id,
       });
 
+      // Update delivery state with provider message ID
       await db.restockSubscription.updateMany({
         where: { id: sub.id, shop },
-        data: { status: "DISPATCHED", dispatchedAt: new Date() },
+        data: {
+          status: "DISPATCHED",
+          dispatchedAt: new Date(),
+          dispatchBatch: batchNumber,
+          providerMessageId: emailResult.messageId || null,
+          deliveryError: null,
+        },
       });
 
+      // Emit native Shopify Flow trigger (Requirement 5)
+      if (admin) {
+        try {
+          await emitRestockFlowTrigger(admin, {
+            customerEmail: sub.customerEmail,
+            productTitle: resolvedTitle,
+            variantTitle: resolvedVariant,
+            price: resolvedPrice,
+            variantId: sub.variantId,
+            productId: sub.productId,
+            shop,
+            discountCode: settings.incentiveDiscountCode || undefined,
+          });
+        } catch (flowErr: any) {
+          console.warn(`[Shopify Flow Trigger Notice for ${sub.customerEmail}]:`, flowErr?.message || flowErr);
+        }
+      }
+
       sent++;
-    } catch (err) {
-      console.error(`[Webhook Auto-Dispatch Error for ${sub.customerEmail}]:`, err);
-      // Revert QUEUED status back to PENDING on error so request is not lost
-      await db.restockSubscription.updateMany({
-        where: { id: sub.id, shop, status: "QUEUED" },
-        data: { status: "PENDING" },
-      });
+    } catch (err: any) {
+      if (err instanceof SuppressedEmailError) {
+        suppressedCount++;
+        await db.restockSubscription.updateMany({
+          where: { id: sub.id, shop },
+          data: {
+            status: "CANCELLED",
+            deliveryError: "Suppressed: recipient opted out or previously bounced",
+          },
+        });
+      } else if (err instanceof HardBounceError) {
+        bouncedCount++;
+        await db.restockSubscription.updateMany({
+          where: { id: sub.id, shop },
+          data: {
+            status: "BOUNCED",
+            deliveryError: err.message,
+          },
+        });
+      } else if (err instanceof QuotaExceededError) {
+        quotaErrorOccurred = true;
+        // Revert to PENDING so queue worker can retry
+        await db.restockSubscription.updateMany({
+          where: { id: sub.id, shop, status: "QUEUED" },
+          data: {
+            status: "PENDING",
+            deliveryError: "Rate/Quota limit reached; queued for delayed retry",
+          },
+        });
+        break; // Stop cohort processing on quota limit
+      } else {
+        console.error(`[Restock Dispatch Error for ${sub.customerEmail}]:`, err?.message || err);
+        await db.restockSubscription.updateMany({
+          where: { id: sub.id, shop, status: "QUEUED" },
+          data: {
+            status: "PENDING",
+            deliveryError: String(err?.message || err).slice(0, 255),
+          },
+        });
+      }
     }
   }
 
-  return { processed: sent };
+  const remainingPendingCount = pendingSubscribers.length - cohort.length;
+
+  return {
+    processed: sent,
+    bouncedCount,
+    suppressedCount,
+    quotaErrorOccurred,
+    remainingPending: Math.max(0, remainingPendingCount),
+    batchNumber,
+  };
 }
 
-/**
- * Backward compatibility wrapper for previous callers.
- */
 export async function processFifoInventoryRestock(params: {
   shop: string;
   inventoryItemId: string;
@@ -346,7 +489,7 @@ export async function processFifoInventoryRestock(params: {
   });
   return {
     dispatchedCount: result.processed,
-    remainingPending: 0,
+    remainingPending: result.remainingPending,
     batchId: 1,
   };
 }

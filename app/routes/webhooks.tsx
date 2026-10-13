@@ -6,6 +6,7 @@ import {
   enqueueInventoryRestock,
   processPendingRestockJobs,
 } from "../services/restockQueue.server";
+import { attributeOrderConversion } from "../services/orderAttribution.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   // Authenticate webhook HMAC signature using official Shopify Remix authenticate
@@ -106,6 +107,21 @@ export async function action({ request }: ActionFunctionArgs) {
       await db.restockJob.deleteMany({ where: { shop } });
       await db.webhookEvent.deleteMany({ where: { shop } });
       await db.inventoryLocationState.deleteMany({ where: { shop } });
+      return new Response(null, { status: 200 });
+    }
+
+    // ORDER CONVERSION ATTRIBUTION WEBHOOKS
+    case "ORDERS_CREATE":
+    case "ORDERS_PAID": {
+      console.log(`[Order Webhook Received] Topic: ${topic} for shop: ${shop}`);
+      try {
+        const attribution = await attributeOrderConversion(shop, payload);
+        console.log(
+          `[Order Attribution Processed] Shop: ${shop} | Matched: ${attribution.matchedCount} restock conversions`
+        );
+      } catch (err: any) {
+        console.error("[Order Attribution Error]:", err?.message || err);
+      }
       return new Response(null, { status: 200 });
     }
 

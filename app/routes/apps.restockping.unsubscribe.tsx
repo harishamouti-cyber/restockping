@@ -4,6 +4,7 @@ import { useLoaderData, useActionData, useNavigation, Form } from "@remix-run/re
 import db from "../db.server";
 import { sanitizeShopBrandName } from "../utils/brand";
 import { verifyUnsubscribeToken } from "../services/unsubscribeToken.server";
+import { suppressEmail } from "../services/suppression.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -146,6 +147,10 @@ export async function action({ request }: ActionFunctionArgs) {
         },
         data: { status: "CANCELLED" },
       });
+    }
+
+    if (verifiedShop && verifiedEmail) {
+      await suppressEmail(verifiedShop, verifiedEmail, "UNSUBSCRIBE", "Customer unsubscribed via restock link");
     }
 
     if (isOneClickHeader) {

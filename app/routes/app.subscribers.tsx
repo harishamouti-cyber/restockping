@@ -3,7 +3,12 @@ import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-r
 import { useLoaderData, useSubmit, useSearchParams, useNavigate, useActionData } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { sendRestockNotificationEmail } from "../services/email.server";
+import {
+  sendRestockNotificationEmail,
+  SuppressedEmailError,
+  HardBounceError,
+} from "../services/email.server";
+import { emitRestockFlowTrigger } from "../services/flowEmitter.server";
 import { getLiveProductMedia, getVariantProductMedia, normalizeShopifyImageUrl } from "../services/catalog.server";
 import { SubscribersIndexTable } from "../components/SubscribersIndexTable";
 import { openThemeEditor } from "../utils/themeDeepLink";
@@ -193,7 +198,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
       const imageLookupError = liveMedia?.imageLookupError || null;
 
-      await sendRestockNotificationEmail({
+      const emailResult = await sendRestockNotificationEmail({
         to: subscriber.customerEmail,
         shop: session.shop,
         storeDisplayName: settings?.storeDisplayName || undefined,
@@ -218,17 +223,51 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data: {
           status: "DISPATCHED",
           dispatchedAt: new Date(),
+          providerMessageId: emailResult.messageId || null,
+          attemptCount: { increment: 1 },
+          lastAttemptedAt: new Date(),
+          deliveryError: null,
           ...(finalImageUrl && !subscriber.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
         },
       });
 
+      // Emit Shopify Flow Trigger
+      try {
+        await emitRestockFlowTrigger(admin, {
+          customerEmail: subscriber.customerEmail,
+          productTitle: resolvedTitle,
+          variantTitle: resolvedVariant,
+          price: resolvedPrice,
+          variantId: subscriber.variantId,
+          productId: subscriber.productId,
+          shop: session.shop,
+          discountCode: settings?.incentiveDiscountCode || undefined,
+        });
+      } catch (flowErr) {
+        console.warn("[Shopify Flow Trigger Notice in Single Dispatch]:", flowErr);
+      }
+
       return json({ success: true, message: `Alert email delivered to ${subscriber.customerEmail}!` });
     } catch (err: any) {
       console.error("[Single Dispatch Error]:", err);
+      if (err instanceof SuppressedEmailError) {
+        await db.restockSubscription.updateMany({
+          where: { id, shop: session.shop },
+          data: { status: "CANCELLED", deliveryError: "Suppressed: recipient opted out or bounced" },
+        });
+        return json({ success: false, error: "Recipient is on the suppression list." }, { status: 400 });
+      }
+      if (err instanceof HardBounceError) {
+        await db.restockSubscription.updateMany({
+          where: { id, shop: session.shop },
+          data: { status: "BOUNCED", deliveryError: err.message },
+        });
+        return json({ success: false, error: `Delivery bounced: ${err.message}` }, { status: 400 });
+      }
       // Revert QUEUED state back to PENDING on error
       await db.restockSubscription.updateMany({
         where: { id, shop: session.shop, status: "QUEUED" },
-        data: { status: "PENDING" },
+        data: { status: "PENDING", deliveryError: String(err?.message || err).slice(0, 255) },
       });
       return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
     }
@@ -279,7 +318,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
         const imageLookupError = liveMedia?.imageLookupError || null;
 
-        await sendRestockNotificationEmail({
+        const emailResult = await sendRestockNotificationEmail({
           to: sub.customerEmail,
           shop: session.shop,
           storeDisplayName: settings?.storeDisplayName || undefined,
@@ -304,17 +343,49 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           data: {
             status: "DISPATCHED",
             dispatchedAt: new Date(),
+            providerMessageId: emailResult.messageId || null,
+            attemptCount: { increment: 1 },
+            lastAttemptedAt: new Date(),
+            deliveryError: null,
             ...(finalImageUrl && !sub.productImageUrl ? { productImageUrl: finalImageUrl } : {}),
           },
         });
 
+        // Emit Shopify Flow Trigger
+        try {
+          await emitRestockFlowTrigger(admin, {
+            customerEmail: sub.customerEmail,
+            productTitle: resolvedTitle,
+            variantTitle: resolvedVariant,
+            price: resolvedPrice,
+            variantId: sub.variantId,
+            productId: sub.productId,
+            shop: session.shop,
+            discountCode: settings?.incentiveDiscountCode || undefined,
+          });
+        } catch (flowErr) {
+          console.warn("[Shopify Flow Trigger Notice in Bulk Dispatch]:", flowErr);
+        }
+
         deliveredCount++;
-      } catch (err) {
+      } catch (err: any) {
         failedCount++;
-        await db.restockSubscription.updateMany({
-          where: { id: sub.id, shop: session.shop, status: "QUEUED" },
-          data: { status: "PENDING" },
-        });
+        if (err instanceof SuppressedEmailError) {
+          await db.restockSubscription.updateMany({
+            where: { id: sub.id, shop: session.shop },
+            data: { status: "CANCELLED", deliveryError: "Suppressed: recipient opted out or bounced" },
+          });
+        } else if (err instanceof HardBounceError) {
+          await db.restockSubscription.updateMany({
+            where: { id: sub.id, shop: session.shop },
+            data: { status: "BOUNCED", deliveryError: err.message },
+          });
+        } else {
+          await db.restockSubscription.updateMany({
+            where: { id: sub.id, shop: session.shop, status: "QUEUED" },
+            data: { status: "PENDING", deliveryError: String(err?.message || err).slice(0, 255) },
+          });
+        }
       }
     }
 

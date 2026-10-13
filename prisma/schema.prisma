@@ -37,6 +37,11 @@ model RestockSettings {
   storefrontButtonText    String   @default("Notify Me When Available")
   storefrontSuccessMessage String  @default("You're on the waitlist! We'll email you the moment stock returns.")
   storefrontButtonRadius  Int      @default(6)
+  emailDeliveryMode     String   @default("APP_MANAGED") // APP_MANAGED | CUSTOM_SMTP
+  customSmtpHost        String?
+  customSmtpPort        Int?
+  customSmtpUser        String?
+  customSmtpEncryptedPass String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
@@ -53,25 +58,29 @@ model InventoryItemMapping {
 }
 
 model RestockSubscription {
-  id              String    @id @default(uuid())
-  shop            String
-  productId       String
-  variantId       String
-  inventoryItemId String
-  productTitle    String
-  variantTitle    String
-  priceSnapshot   Float     @default(0.0)
-  customerEmail   String?
-  productImageUrl String?
-  pushEndpoint    String?
-  pushP256dh      String?
-  pushAuth        String?
-  channel         String    @default("EMAIL") // EMAIL | WEB_PUSH
-  status          String    @default("PENDING") // PENDING | QUEUED | DISPATCHED | CONVERTED | CANCELLED
-  dispatchBatch   Int       @default(0)
-  createdAt       DateTime  @default(now())
-  dispatchedAt    DateTime?
-  convertedAt     DateTime?
+  id                String    @id @default(uuid())
+  shop              String
+  productId         String
+  variantId         String
+  inventoryItemId   String
+  productTitle      String
+  variantTitle      String
+  priceSnapshot     Float     @default(0.0)
+  customerEmail     String?
+  productImageUrl   String?
+  pushEndpoint      String?
+  pushP256dh        String?
+  pushAuth          String?
+  channel           String    @default("EMAIL") // EMAIL | WEB_PUSH
+  status            String    @default("PENDING") // PENDING | QUEUED | DISPATCHED | CONVERTED | CANCELLED | BOUNCED
+  dispatchBatch     Int       @default(0)
+  providerMessageId String?
+  deliveryError     String?
+  attemptCount      Int       @default(0)
+  lastAttemptedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  dispatchedAt      DateTime?
+  convertedAt       DateTime?
 
   @@index([shop, variantId, status])
   @@index([shop, inventoryItemId, status])
@@ -98,6 +107,7 @@ model RestockJob {
   availableQuantity Int
   status            String    @default("PENDING") // PENDING | PROCESSING | COMPLETED | SKIPPED | FAILED
   processedCount    Int       @default(0)
+  batchNumber       Int       @default(1)
   scheduledFor      DateTime  @default(now())
   lockedAt          DateTime?
   completedAt       DateTime?
@@ -107,6 +117,18 @@ model RestockJob {
 
   @@index([shop, inventoryItemId, status])
   @@index([status, scheduledFor])
+}
+
+model EmailSuppression {
+  id        String   @id @default(uuid())
+  shop      String
+  email     String
+  reason    String   // BOUNCE | COMPLAINT | UNSUBSCRIBE
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@unique([shop, email])
+  @@index([shop, email])
 }
 
 model InventoryLocationState {

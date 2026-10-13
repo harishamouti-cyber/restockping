@@ -24,11 +24,9 @@ export async function recordWebhookEvent(
     });
     return { isDuplicate: false };
   } catch (err: any) {
-    // Unique constraint violation P2002 indicates duplicate delivery
     if (err?.code === "P2002" || String(err?.message || "").includes("Unique constraint")) {
       return { isDuplicate: true };
     }
-    // If table write fails unexpectedly, allow processing rather than losing webhooks
     console.error("[Webhook Deduplication Error]:", err?.message || err);
     return { isDuplicate: false };
   }
@@ -71,7 +69,7 @@ export async function enqueueInventoryRestock(params: EnqueueInventoryParams): P
   const minThreshold = settings.minRestockThreshold || 1;
   const dripIntervalMs = (settings.dripIntervalMinutes || 120) * 60 * 1000;
 
-  // 2. Query location state to inspect previous available quantity and last alert timestamp
+  // 2. Query location state
   const locationState = await db.inventoryLocationState.findUnique({
     where: {
       shop_inventoryItemId_locationId: {
@@ -104,7 +102,7 @@ export async function enqueueInventoryRestock(params: EnqueueInventoryParams): P
     },
   });
 
-  // POLICY 1: Inventory did not increase (e.g. order placed, reduction, or repeated webhook)
+  // POLICY 1: Inventory did not increase (e.g. sales reduction or repeated webhook)
   if (locationState && availableQuantity <= previousAvailable) {
     return {
       enqueued: false,
@@ -112,7 +110,7 @@ export async function enqueueInventoryRestock(params: EnqueueInventoryParams): P
     };
   }
 
-  // POLICY 2: Inventory is below the merchant's minimum restock threshold
+  // POLICY 2: Inventory is below merchant threshold
   if (availableQuantity < minThreshold) {
     return {
       enqueued: false,
@@ -141,6 +139,7 @@ export async function enqueueInventoryRestock(params: EnqueueInventoryParams): P
       locationId,
       availableQuantity,
       status: "PENDING",
+      batchNumber: 1,
       scheduledFor,
     },
   });
@@ -154,12 +153,16 @@ export async function enqueueInventoryRestock(params: EnqueueInventoryParams): P
 
 /**
  * Background worker: processes pending restock jobs that are due.
- * Atomically locks each job to ensure concurrent workers cannot process the same job.
+ * Supports:
+ * - Atomic job claim locking
+ * - Pre-dispatch live inventory verification
+ * - Paced multi-cohort scheduling across dripIntervalMinutes
+ * - Retries with exponential backoff for transient mail quota limits
  */
 export async function processPendingRestockJobs(options?: {
   jobId?: string;
   admin?: any;
-}): Promise<{ processedJobs: number; dispatchedSubscribers: number }> {
+}): Promise<{ processedJobs: number; dispatchedSubscribers: number; nextCohortsScheduled: number }> {
   const now = new Date();
 
   // Find due jobs
@@ -176,6 +179,7 @@ export async function processPendingRestockJobs(options?: {
 
   let processedJobs = 0;
   let totalDispatched = 0;
+  let nextCohortsScheduled = 0;
 
   for (const job of jobs) {
     // Atomically claim and lock the job
@@ -185,7 +189,6 @@ export async function processPendingRestockJobs(options?: {
     });
 
     if (lockResult.count === 0) {
-      // Already claimed by another worker instance
       continue;
     }
 
@@ -195,7 +198,37 @@ export async function processPendingRestockJobs(options?: {
         inventoryItemId: job.inventoryItemId,
         newAvailableQuantity: job.availableQuantity,
         admin: options?.admin,
+        batchNumber: job.batchNumber,
       });
+
+      if (result.skippedDueToInventory) {
+        // Stock sold out before this cohort could be dispatched
+        await db.restockJob.update({
+          where: { id: job.id },
+          data: {
+            status: "SKIPPED",
+            error: result.reason,
+            completedAt: new Date(),
+          },
+        });
+        processedJobs++;
+        continue;
+      }
+
+      // Handle transient quota limit retry
+      if (result.quotaErrorOccurred) {
+        console.warn(`[Quota Backoff] Rescheduling job ${job.id} for retry in 15 minutes due to provider quota`);
+        await db.restockJob.update({
+          where: { id: job.id },
+          data: {
+            status: "PENDING",
+            scheduledFor: new Date(Date.now() + 15 * 60 * 1000), // Retry in 15m
+            error: "Rate/Quota limit hit. Scheduled for delayed retry.",
+            lockedAt: null,
+          },
+        });
+        continue;
+      }
 
       // Update location state with last dispatch timestamp if alerts were sent
       if (result.processed > 0) {
@@ -220,6 +253,7 @@ export async function processPendingRestockJobs(options?: {
         });
       }
 
+      // Mark current job as completed
       await db.restockJob.update({
         where: { id: job.id },
         data: {
@@ -231,6 +265,32 @@ export async function processPendingRestockJobs(options?: {
 
       processedJobs++;
       totalDispatched += result.processed;
+
+      // PACED COHORT SCHEDULING (Requirement 1):
+      // If there are remaining pending subscribers waiting for this item,
+      // schedule the next cohort after dripIntervalMinutes!
+      if (result.remainingPending > 0) {
+        const settings = await db.restockSettings.findUnique({ where: { shop: job.shop } });
+        const intervalMinutes = settings?.dripIntervalMinutes || 120;
+        const nextScheduledFor = new Date(Date.now() + intervalMinutes * 60 * 1000);
+
+        await db.restockJob.create({
+          data: {
+            shop: job.shop,
+            inventoryItemId: job.inventoryItemId,
+            locationId: job.locationId,
+            availableQuantity: job.availableQuantity,
+            status: "PENDING",
+            batchNumber: job.batchNumber + 1,
+            scheduledFor: nextScheduledFor,
+          },
+        });
+
+        nextCohortsScheduled++;
+        console.log(
+          `[Paced Cohort Scheduled] Enqueued Batch #${job.batchNumber + 1} for ${job.shop} in ${intervalMinutes} minutes (${result.remainingPending} subscribers remaining).`
+        );
+      }
     } catch (err: any) {
       console.error(`[Restock Job Processing Error for ${job.id}]:`, err?.message || err);
       await db.restockJob.update({
@@ -243,5 +303,5 @@ export async function processPendingRestockJobs(options?: {
     }
   }
 
-  return { processedJobs, dispatchedSubscribers: totalDispatched };
+  return { processedJobs, dispatchedSubscribers: totalDispatched, nextCohortsScheduled };
 }

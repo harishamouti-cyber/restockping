@@ -7,6 +7,7 @@ import { sendRestockNotificationEmail } from "../services/email.server";
 import { fetchCatalogProductsWithStatus, getLiveProductMedia, type CatalogProductOption } from "../services/catalog.server";
 import { sanitizeShopBrandName, isRawDevBrand } from "../utils/brand";
 import { renderEmailCopy, type TemplateVariables } from "../utils/emailTemplate";
+import { encryptCredential } from "../services/crypto.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -85,6 +86,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       storeDisplayName: effectiveStoreDisplayName,
       incentiveDiscountCode: (activeSettings as any).incentiveDiscountCode || "",
       emailButtonText: activeSettings.emailButtonText || "Claim In-Stock Item →",
+      emailDeliveryMode: (activeSettings as any).emailDeliveryMode || "APP_MANAGED",
+      replyToEmail: (activeSettings as any).replyToEmail || "",
+      customSmtpHost: (activeSettings as any).customSmtpHost || "",
+      customSmtpPort: (activeSettings as any).customSmtpPort || 587,
+      customSmtpUser: (activeSettings as any).customSmtpUser || "",
+      hasCustomSmtpPass: Boolean((activeSettings as any).customSmtpEncryptedPass),
     },
     shop,
     previewItem: defaultPreview,
@@ -145,6 +152,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         buttonColor: String(formData.get("accentColor") || "#008060"),
         subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
         discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
+        replyTo: String(formData.get("replyToEmail") || "").trim() || undefined,
       });
       return json({ success: true, message: `Test email for "${finalProductTitle}" sent to ${targetEmail}.` });
     } catch (err: any) {
@@ -168,41 +176,51 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const storefrontButtonText = String(formData.get("storefrontButtonText") || "Notify Me When Available");
   const storefrontSuccessMessage = String(formData.get("storefrontSuccessMessage") || "You're on the waitlist! We'll email you the moment stock returns.");
   const storefrontButtonRadius = parseInt(String(formData.get("storefrontButtonRadius")) || "6", 10);
+  const emailDeliveryMode = String(formData.get("emailDeliveryMode") || "APP_MANAGED");
+  const replyToEmail = String(formData.get("replyToEmail") || "").trim() || null;
+  const customSmtpHost = String(formData.get("customSmtpHost") || "").trim() || null;
+  const customSmtpPort = parseInt(String(formData.get("customSmtpPort") || "587"), 10) || 587;
+  const customSmtpUser = String(formData.get("customSmtpUser") || "").trim() || null;
+  const customSmtpPass = String(formData.get("customSmtpPass") || "").trim();
+
+  let customSmtpEncryptedPass: string | undefined = undefined;
+  if (customSmtpPass && customSmtpPass !== "••••••••") {
+    customSmtpEncryptedPass = encryptCredential(customSmtpPass);
+  }
+
+  const updateData: any = {
+    storeDisplayName,
+    dripBatchMultiplier,
+    dripIntervalMinutes,
+    minRestockThreshold,
+    accentColor,
+    senderName,
+    replyToEmail,
+    emailDeliveryMode,
+    customSmtpHost,
+    customSmtpPort,
+    customSmtpUser,
+    incentiveDiscountCode,
+    emailSubjectTemplate,
+    emailHeadline,
+    emailBodyText,
+    emailButtonText,
+    storefrontButtonText,
+    storefrontSuccessMessage,
+    storefrontButtonRadius,
+  };
+
+  if (customSmtpEncryptedPass !== undefined) {
+    updateData.customSmtpEncryptedPass = customSmtpEncryptedPass;
+  }
 
   await db.restockSettings.upsert({
     where: { shop: session.shop },
-    update: {
-      storeDisplayName,
-      dripBatchMultiplier,
-      dripIntervalMinutes,
-      minRestockThreshold,
-      accentColor,
-      senderName,
-      incentiveDiscountCode,
-      emailSubjectTemplate,
-      emailHeadline,
-      emailBodyText,
-      emailButtonText,
-      storefrontButtonText,
-      storefrontSuccessMessage,
-      storefrontButtonRadius,
-    },
+    update: updateData,
     create: {
       shop: session.shop,
-      storeDisplayName,
-      dripBatchMultiplier,
-      dripIntervalMinutes,
-      minRestockThreshold,
-      accentColor,
-      senderName,
-      incentiveDiscountCode,
-      emailSubjectTemplate,
-      emailHeadline,
-      emailBodyText,
-      emailButtonText,
-      storefrontButtonText,
-      storefrontSuccessMessage,
-      storefrontButtonRadius,
+      ...updateData,
+      customSmtpEncryptedPass: customSmtpEncryptedPass || null,
     },
   });
 
@@ -359,6 +377,8 @@ export default function Settings() {
     fd.append("emailBodyText", formState.emailBodyText);
     fd.append("emailButtonText", formState.emailButtonText);
     fd.append("accentColor", formState.accentColor);
+    fd.append("replyToEmail", formState.replyToEmail || "");
+    fd.append("emailDeliveryMode", formState.emailDeliveryMode || "APP_MANAGED");
     // Real selected catalog product parameters
     fd.append("previewProductTitle", activePreviewItem.productTitle);
     fd.append("previewVariantTitle", activePreviewItem.variantTitle);
@@ -527,7 +547,7 @@ export default function Settings() {
               </div>
 
               {/* Sender Name & Brand Name */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-[#202223] block mb-1">Sender Name</label>
                   <input
@@ -551,6 +571,99 @@ export default function Settings() {
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
                   />
                 </div>
+                <div>
+                  <label className="text-xs font-medium text-[#202223] block mb-1">Support Reply-To Email</label>
+                  <input
+                    ref={(el) => (inputRefs.current.replyToEmail = el)}
+                    type="email"
+                    value={formState.replyToEmail || ""}
+                    placeholder="e.g. support@store.com"
+                    onFocus={() => setActiveField("replyToEmail")}
+                    onChange={(e) => handleChange("replyToEmail", e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223]"
+                  />
+                </div>
+              </div>
+
+              {/* Delivery Infrastructure Mode (Truthful Sender Architecture) */}
+              <div className="p-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-[#111827] block">Delivery Infrastructure</span>
+                    <span className="text-[11px] text-[#6b7280]">
+                      {formState.emailDeliveryMode === "CUSTOM_SMTP"
+                        ? "Delivering via private custom SMTP server (AES-256 encrypted)."
+                        : "Delivering via RestockPing high-reputation transactional delivery cluster."}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-[#374151] cursor-pointer">
+                      <input
+                        type="radio"
+                        name="emailDeliveryModeRadio"
+                        checked={formState.emailDeliveryMode !== "CUSTOM_SMTP"}
+                        onChange={() => handleChange("emailDeliveryMode", "APP_MANAGED")}
+                        className="text-[#008060] focus:ring-[#008060]"
+                      />
+                      App-Managed
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-[#374151] cursor-pointer">
+                      <input
+                        type="radio"
+                        name="emailDeliveryModeRadio"
+                        checked={formState.emailDeliveryMode === "CUSTOM_SMTP"}
+                        onChange={() => handleChange("emailDeliveryMode", "CUSTOM_SMTP")}
+                        className="text-[#008060] focus:ring-[#008060]"
+                      />
+                      Custom SMTP
+                    </label>
+                  </div>
+                </div>
+
+                {formState.emailDeliveryMode === "CUSTOM_SMTP" && (
+                  <div className="pt-2 border-t border-[#e5e7eb] grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div>
+                      <label className="text-[11px] font-medium text-[#374151] block mb-0.5">SMTP Host</label>
+                      <input
+                        type="text"
+                        value={formState.customSmtpHost || ""}
+                        placeholder="smtp.sendgrid.net"
+                        onChange={(e) => handleChange("customSmtpHost", e.target.value)}
+                        className="w-full px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded focus:outline-none focus:border-[#008060]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#374151] block mb-0.5">SMTP Port</label>
+                      <input
+                        type="number"
+                        value={formState.customSmtpPort || 587}
+                        onChange={(e) => handleChange("customSmtpPort", parseInt(e.target.value, 10) || 587)}
+                        className="w-full px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded focus:outline-none focus:border-[#008060]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#374151] block mb-0.5">SMTP Username</label>
+                      <input
+                        type="text"
+                        value={formState.customSmtpUser || ""}
+                        placeholder="apikey"
+                        onChange={(e) => handleChange("customSmtpUser", e.target.value)}
+                        className="w-full px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded focus:outline-none focus:border-[#008060]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#374151] block mb-0.5">
+                        SMTP Password {formState.hasCustomSmtpPass ? "(Encrypted)" : ""}
+                      </label>
+                      <input
+                        type="password"
+                        placeholder={formState.hasCustomSmtpPass ? "••••••••" : "Password / Key"}
+                        onChange={(e) => handleChange("customSmtpPass", e.target.value)}
+                        className="w-full px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded focus:outline-none focus:border-[#008060]"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Subject Line & Token Chips */}
@@ -743,6 +856,12 @@ export default function Settings() {
                   />
                   <span className="text-[11px] text-[#8c9196] mt-0.5 block">Threshold before alerts fire.</span>
                 </div>
+              </div>
+              <div className="pt-2 border-t border-[#f1f2f4] flex items-center gap-1.5 text-[11px] text-[#6d7175]">
+                <span className="text-[#008060] font-bold">ℹ</span>
+                <span>
+                  <strong>Stock Safety:</strong> Notifications do not reserve inventory. Customers complete purchases on a first-come, first-served basis at checkout.
+                </span>
               </div>
             </div>
           </div>
