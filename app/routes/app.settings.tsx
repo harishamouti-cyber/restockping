@@ -4,16 +4,21 @@ import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-r
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
-import { getAllActiveCatalogProducts, getLiveProductMedia, type CatalogProductOption } from "../services/catalog.server";
+import { fetchCatalogProductsWithStatus, getLiveProductMedia, type CatalogProductOption } from "../services/catalog.server";
 import { sanitizeShopBrandName, isRawDevBrand } from "../utils/brand";
+import { renderEmailCopy, type TemplateVariables } from "../utils/emailTemplate";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [settingsRecord, catalogProducts] = await Promise.all([
+  const [settingsRecord, catalogResult, waitlistSample] = await Promise.all([
     db.restockSettings.findUnique({ where: { shop } }),
-    getAllActiveCatalogProducts(admin),
+    fetchCatalogProductsWithStatus(admin),
+    db.restockSubscription.findFirst({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   const sanitizedDefault = sanitizeShopBrandName(shop);
@@ -43,6 +48,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storefrontButtonRadius: 6,
   };
 
+  const hasRealCatalogProducts = catalogResult.products.length > 0;
+  const isWaitlistFallback = !hasRealCatalogProducts && Boolean(waitlistSample);
+
+  let catalogProducts: CatalogProductOption[] = catalogResult.products;
+  if (isWaitlistFallback && waitlistSample) {
+    catalogProducts = [
+      {
+        productId: waitlistSample.productId,
+        variantId: waitlistSample.variantId,
+        productTitle: waitlistSample.productTitle || "Waitlist Item",
+        variantTitle: waitlistSample.variantTitle || "Default Title",
+        price: waitlistSample.priceSnapshot || 0,
+        imageUrl: waitlistSample.productImageUrl || "",
+      },
+    ];
+  }
+
   const isSampleCatalog = catalogProducts.length === 0;
 
   // Set default selected item to the first product with a valid image (e.g. snowboard)
@@ -67,6 +89,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shop,
     previewItem: defaultPreview,
     catalogProducts,
+    hasRealCatalogProducts,
+    catalogError: catalogResult.error,
+    catalogErrorType: catalogResult.errorType,
+    isWaitlistFallback,
     isSampleCatalog,
     defaultRecipient: "",
   });
@@ -93,12 +119,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Look up live product details from Admin API
       const liveProduct = selectedVariantId ? await getLiveProductMedia(admin, selectedVariantId) : null;
 
-      // Pass selected product data with fallback to client preview values
-      const finalProductTitle = liveProduct?.productTitle || previewTitle || "Restocked Item";
-      const finalVariantTitle = liveProduct?.variantTitle || previewVariantTitle || "Default Title";
-      const finalPrice = liveProduct?.price ?? previewPrice;
-      const finalVariantId = liveProduct?.variantId || selectedVariantId;
-      const finalImageUrl = liveProduct?.imageUrl || previewImageUrl || undefined;
+      // Pass selected product data with safe fallback: never overwrite valid preview with dummy failure placeholders
+      const hasLiveMedia = Boolean(liveProduct && !liveProduct.isLookupFailed && liveProduct.productTitle);
+      const finalProductTitle = (hasLiveMedia ? liveProduct?.productTitle : previewTitle) || previewTitle || "Restocked Item";
+      const finalVariantTitle = (hasLiveMedia ? liveProduct?.variantTitle : previewVariantTitle) || previewVariantTitle || "Default Title";
+      const finalPrice = (hasLiveMedia && liveProduct?.price !== undefined) ? liveProduct.price : previewPrice;
+      const finalVariantId = (hasLiveMedia && liveProduct?.variantId) ? liveProduct.variantId : selectedVariantId;
+      const finalImageUrl = (hasLiveMedia && liveProduct?.imageUrl) ? liveProduct.imageUrl : (previewImageUrl || undefined);
+      const imageLookupError = liveProduct?.imageLookupError;
 
       await sendRestockNotificationEmail({
         to: targetEmail,
@@ -109,6 +137,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         price: finalPrice,
         variantId: finalVariantId,
         productImageUrl: finalImageUrl,
+        imageLookupError,
         senderName: String(formData.get("senderName") || "Restock Alerts"),
         headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
         bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
@@ -181,8 +210,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Settings() {
-  const { settings, shop, previewItem, catalogProducts, isSampleCatalog, defaultRecipient } =
-    useLoaderData<typeof loader>();
+  const {
+    settings,
+    shop,
+    previewItem,
+    catalogProducts,
+    hasRealCatalogProducts,
+    catalogError,
+    catalogErrorType,
+    isWaitlistFallback,
+    isSampleCatalog,
+    defaultRecipient,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -266,6 +305,14 @@ export default function Settings() {
       </button>
       <button
         type="button"
+        onClick={() => insertVariableIntoField(targetField, "{{variant_title}}")}
+        className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
+        title="Insert variant title"
+      >
+        + Variant
+      </button>
+      <button
+        type="button"
         onClick={() => insertVariableIntoField(targetField, "{{price}}")}
         className="text-[10px] bg-[#f1f2f4] hover:bg-[#e4e5e7] text-[#202223] px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer"
         title="Insert product price"
@@ -332,10 +379,17 @@ export default function Settings() {
   const displayBrand =
     formState.storeDisplayName?.trim() || sanitizeShopBrandName(shop);
 
-  const computedSubject = (formState.emailSubjectTemplate || "Back in Stock: {{product_title}} is ready to ship")
-    .replace(/\{\{\s*product_title\s*\}\}/g, activePreviewItem.productTitle)
-    .replace(/\{\{\s*(?:price|product_price)\s*\}\}/g, `$${activePreviewItem.price.toFixed(2)}`)
-    .replace(/\{\{\s*(?:store|store_name|shop_name)\s*\}\}/g, displayBrand);
+  const renderedCopy = renderEmailCopy({
+    subjectTemplate: formState.emailSubjectTemplate,
+    headlineTemplate: formState.emailHeadline,
+    bodyTemplate: formState.emailBodyText,
+    variables: {
+      product_title: activePreviewItem.productTitle,
+      variant_title: activePreviewItem.variantTitle,
+      price: activePreviewItem.price,
+      store: displayBrand,
+    },
+  });
 
   return (
     <div className="min-h-screen bg-[#f1f2f4] pb-24 font-sans text-[#202223] antialiased">
@@ -444,6 +498,14 @@ export default function Settings() {
                     title="Insert {{product_title}}"
                   >
                     + Product Title
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertVariableIntoActiveField("{{variant_title}}")}
+                    className="px-2 py-0.5 text-[10px] font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded hover:bg-[#e4e5e7] transition-colors cursor-pointer shadow-2xs"
+                    title="Insert {{variant_title}}"
+                  >
+                    + Variant Title
                   </button>
                   <button
                     type="button"
@@ -709,22 +771,57 @@ export default function Settings() {
                       </option>
                     ))}
                     {catalogProducts.length === 0 && (
-                      <option value="">No real Shopify products found</option>
+                      <option value="">
+                        {catalogError ? `Catalog unavailable: ${catalogError}` : "No real Shopify products found"}
+                      </option>
                     )}
                   </select>
                 </div>
-                {catalogProducts.length === 0 && (
+                {isWaitlistFallback ? (
+                  <span
+                    className="text-[10px] font-semibold bg-[#eef2ff] text-[#4f46e5] px-2 py-0.5 rounded border border-[#c7d2fe] shrink-0"
+                    title="Using subscriber waitlist record because live catalog query was unavailable"
+                  >
+                    Waitlist Sample Preview
+                  </span>
+                ) : catalogError ? (
+                  <span
+                    className="text-[10px] font-semibold bg-[#fef2f2] text-[#991b1b] px-2 py-0.5 rounded border border-[#fecaca] shrink-0"
+                    title={catalogError}
+                  >
+                    {catalogErrorType === "SCOPE_ERROR" ? "Scope Error" : "Catalog API Error"}
+                  </span>
+                ) : catalogProducts.length === 0 ? (
                   <span
                     className="text-[10px] font-semibold bg-[#fff4e5] text-[#b98900] px-2 py-0.5 rounded border border-[#f5b854] shrink-0"
                     title="No real Shopify catalog products are available to preview"
                   >
                     No catalog products
                   </span>
-                )}
+                ) : null}
               </div>
 
-              {/* Warning Banner: Automatically unmounted when catalog products exist */}
-              {catalogProducts.length === 0 ? (
+              {/* Informative Error / Empty State Banners */}
+              {catalogError ? (
+                <div className="w-full py-3 px-3.5 bg-[#fef2f2] border border-[#fecaca] rounded-lg mb-3 text-left">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[#991b1b]">
+                    <span>⚠️</span>
+                    <span>
+                      {catalogErrorType === "SCOPE_ERROR"
+                        ? "Shopify Permission Notice (read_products scope required)"
+                        : "Shopify Catalog Query Notice"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#7f1d1d] mt-1 leading-relaxed">
+                    {catalogError}
+                  </p>
+                  {isWaitlistFallback && (
+                    <p className="text-[11px] text-[#4338ca] font-medium mt-1.5 bg-[#eef2ff] px-2 py-1 rounded border border-[#c7d2fe]">
+                      ✓ Loaded real product details from your subscriber waitlist so you can preview templates and send test emails.
+                    </p>
+                  )}
+                </div>
+              ) : catalogProducts.length === 0 ? (
                 <div className="w-full text-center py-4 px-3 bg-[#fffbf2] border border-[#f5b854] rounded-lg mb-3">
                   <p className="text-xs font-semibold text-[#8a6116]">No active products found in store catalog</p>
                   <p className="text-[11px] text-[#6d7175] mt-0.5">
@@ -732,9 +829,16 @@ export default function Settings() {
                   </p>
                 </div>
               ) : (!activePreviewItem.imageUrl || imgLoadError) ? (
-                <p className="w-full text-[11px] text-[#8a6116] bg-[#fff8e5] border border-[#f1d58a] rounded-md px-2.5 py-2 mb-3">
-                  This Shopify product has no usable image. Add or restore its product image in Shopify to include it in restock emails.
-                </p>
+                <div className="w-full text-[11px] bg-[#fff8e5] border border-[#f1d58a] rounded-md px-2.5 py-2 mb-3 flex items-center justify-between">
+                  <span className="text-[#8a6116]">
+                    {imgLoadError
+                      ? "Product image lookup failed (Shopify API error or inaccessible image CDN URL)."
+                      : "No product image uploaded in store catalog for this item."}
+                  </span>
+                  <span className="text-[10px] font-semibold text-[#b98900] uppercase tracking-wider bg-white/70 px-1.5 py-0.5 rounded border border-[#f1d58a]">
+                    {imgLoadError ? "Lookup Error" : "No Photo"}
+                  </span>
+                </div>
               ) : null}
 
               <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -821,7 +925,7 @@ export default function Settings() {
                         <span>{displayBrand}</span>
                       </div>
                       <div className="text-xs font-semibold text-[#202223] break-words">
-                        {computedSubject}
+                        {renderedCopy.subject}
                       </div>
                     </div>
 
@@ -829,10 +933,10 @@ export default function Settings() {
                       ● Restock Notice
                     </span>
                     <h3 className="text-base font-bold text-[#202223] leading-snug break-words">
-                      {formState.emailHeadline || "Your item is back in stock"}
+                      {renderedCopy.headline || "Your item is back in stock"}
                     </h3>
-                    <p className="text-xs text-[#6d7175] leading-relaxed break-words">
-                      {formState.emailBodyText ||
+                    <p className="text-xs text-[#6d7175] leading-relaxed break-words whitespace-pre-line">
+                      {renderedCopy.bodyText ||
                         "Good news! An item you requested is available again. Complete your order now before inventory runs out."}
                     </p>
 
@@ -849,9 +953,11 @@ export default function Settings() {
                           />
                         ) : (
                           <div className="flex flex-col items-center justify-center text-center p-2">
-                            <span className="text-xl text-[#9ca3af]">📷</span>
+                            <span className="text-xl text-[#9ca3af]">
+                              {imgLoadError ? "⚠️" : "📷"}
+                            </span>
                             <span className="text-[9px] text-[#9ca3af] font-semibold uppercase tracking-tight mt-1">
-                              No image
+                              {imgLoadError ? "Lookup Error" : "No image"}
                             </span>
                           </div>
                         )}
@@ -868,13 +974,17 @@ export default function Settings() {
                             ${activePreviewItem.price.toFixed(2)}
                           </span>
                         </div>
-                        {(!activePreviewItem.imageUrl || imgLoadError) ? (
-                          <span className="text-[10px] text-[#9ca3af] italic block">
-                            No photo uploaded in store catalog
-                          </span>
-                        ) : (
+                        {activePreviewItem.imageUrl && !imgLoadError ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-[#008060] font-medium bg-[#e3f1df] px-1.5 py-0.5 rounded">
                             ✓ Shopify CDN (width=300)
+                          </span>
+                        ) : imgLoadError ? (
+                          <span className="text-[10px] text-[#b91c1c] font-medium block">
+                            ⚠️ Product image lookup failed (Shopify API error)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-[#6b7280] italic block">
+                            No product image uploaded in store catalog
                           </span>
                         )}
                       </div>

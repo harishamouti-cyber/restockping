@@ -171,19 +171,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         console.error("[Catalog Media Fetch Error in Single Dispatch]:", err);
       }
 
-      const rawImg = liveMedia?.imageUrl || subscriber.productImageUrl || undefined;
+      const hasLiveMedia = Boolean(liveMedia && !liveMedia.isLookupFailed && liveMedia.productTitle);
+      const resolvedTitle = hasLiveMedia ? liveMedia!.productTitle : subscriber.productTitle;
+      const resolvedVariant = (hasLiveMedia && liveMedia!.variantTitle && liveMedia!.variantTitle !== "Default Title")
+        ? liveMedia!.variantTitle
+        : subscriber.variantTitle;
+      const resolvedPrice = (hasLiveMedia && typeof liveMedia!.price === "number" && liveMedia!.price > 0)
+        ? liveMedia!.price
+        : (Number(subscriber.priceSnapshot) || 0);
+
+      const rawImg = (hasLiveMedia && liveMedia?.imageUrl) || subscriber.productImageUrl || undefined;
       const normalizedImg = normalizeShopifyImageUrl(rawImg, session.shop);
       const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
+      const imageLookupError = liveMedia?.imageLookupError || null;
 
       await sendRestockNotificationEmail({
         to: subscriber.customerEmail,
         shop: session.shop,
         storeDisplayName: settings?.storeDisplayName || undefined,
-        productTitle: liveMedia?.productTitle || subscriber.productTitle,
-        variantTitle: liveMedia?.variantTitle || subscriber.variantTitle,
-        price: liveMedia?.price ?? (Number(subscriber.priceSnapshot) || 0),
-        variantId: liveMedia?.variantId || subscriber.variantId,
+        productTitle: resolvedTitle,
+        variantTitle: resolvedVariant,
+        price: resolvedPrice,
+        variantId: (hasLiveMedia && liveMedia?.variantId) || subscriber.variantId,
         productImageUrl: finalImageUrl,
+        imageLookupError,
         senderName: settings?.senderName,
         subjectTemplate: settings?.emailSubjectTemplate,
         headlineText: settings?.emailHeadline,
@@ -233,19 +244,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           console.error("[Catalog Media Fetch Error in Bulk Dispatch]:", err);
         }
 
-        const rawImg = liveMedia?.imageUrl || sub.productImageUrl || undefined;
+        const hasLiveMedia = Boolean(liveMedia && !liveMedia.isLookupFailed && liveMedia.productTitle);
+        const resolvedTitle = hasLiveMedia ? liveMedia!.productTitle : sub.productTitle;
+        const resolvedVariant = (hasLiveMedia && liveMedia!.variantTitle && liveMedia!.variantTitle !== "Default Title")
+          ? liveMedia!.variantTitle
+          : sub.variantTitle;
+        const resolvedPrice = (hasLiveMedia && typeof liveMedia!.price === "number" && liveMedia!.price > 0)
+          ? liveMedia!.price
+          : (Number(sub.priceSnapshot) || 0);
+
+        const rawImg = (hasLiveMedia && liveMedia?.imageUrl) || sub.productImageUrl || undefined;
         const normalizedImg = normalizeShopifyImageUrl(rawImg, session.shop);
         const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
+        const imageLookupError = liveMedia?.imageLookupError || null;
 
         await sendRestockNotificationEmail({
           to: sub.customerEmail,
           shop: session.shop,
           storeDisplayName: settings?.storeDisplayName || undefined,
-          productTitle: liveMedia?.productTitle || sub.productTitle,
-          variantTitle: liveMedia?.variantTitle || sub.variantTitle,
-          price: liveMedia?.price ?? (Number(sub.priceSnapshot) || 0),
-          variantId: liveMedia?.variantId || sub.variantId,
+          productTitle: resolvedTitle,
+          variantTitle: resolvedVariant,
+          price: resolvedPrice,
+          variantId: (hasLiveMedia && liveMedia?.variantId) || sub.variantId,
           productImageUrl: finalImageUrl,
+          imageLookupError,
           senderName: settings?.senderName,
           subjectTemplate: settings?.emailSubjectTemplate,
           headlineText: settings?.emailHeadline,

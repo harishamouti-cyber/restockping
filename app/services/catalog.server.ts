@@ -3,13 +3,14 @@ import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 export interface ResolvedProductMedia {
   productTitle: string;
   variantTitle: string;
-  price: number;
+  price?: number;
   variantId: string;
   productId: string;
   imageUrl: string;
   hasImage: boolean;
   rawImageUrl?: string;
   imageLookupError?: string | null;
+  isLookupFailed?: boolean;
 }
 
 export interface CatalogProductOption {
@@ -19,6 +20,14 @@ export interface CatalogProductOption {
   variantTitle: string;
   price: number;
   imageUrl: string;
+  imageLookupError?: string | null;
+  isWaitlistFallback?: boolean;
+}
+
+export interface CatalogProductsResult {
+  products: CatalogProductOption[];
+  error?: string | null;
+  errorType?: "SCOPE_ERROR" | "AUTH_ERROR" | "API_ERROR" | "NETWORK_ERROR" | null;
 }
 
 /**
@@ -96,8 +105,8 @@ export function formatShopifyImageUrl(rawUrl?: string | null, width = 300, shop?
  * Strict invariants:
  * - NEVER match by title alone.
  * - NEVER substitute an unrelated product's image when an item has no image.
- * - If image lookup fails or GraphQL errors occur, report the lookup error.
- * - If the exact item has no image, report hasImage = false with an empty URL.
+ * - If image lookup fails or GraphQL errors occur, report isLookupFailed: true without
+ *   substituting fake "Restocked Item" placeholders or $0 prices over valid caller data.
  */
 export async function getLiveProductMedia(
   admin: AdminApiContext | any,
@@ -162,12 +171,13 @@ export async function getLiveProductMedia(
           return {
             productId: productId || "",
             variantId: formattedVariantId,
-            productTitle: "Restocked Item",
-            variantTitle: "Default Title",
-            price: 0,
+            productTitle: "",
+            variantTitle: "",
+            price: undefined,
             imageUrl: "",
             hasImage: false,
             imageLookupError: statusText,
+            isLookupFailed: true,
           };
         }
 
@@ -184,12 +194,13 @@ export async function getLiveProductMedia(
           return {
             productId: productId || "",
             variantId: formattedVariantId,
-            productTitle: "Restocked Item",
-            variantTitle: "Default Title",
-            price: 0,
+            productTitle: "",
+            variantTitle: "",
+            price: undefined,
             imageUrl: "",
             hasImage: false,
             imageLookupError: `Shopify GraphQL Error: ${errMsg}`,
+            isLookupFailed: true,
           };
         }
 
@@ -222,13 +233,14 @@ export async function getLiveProductMedia(
           return {
             productId: variant.product?.id || productId || "",
             variantId: variant.id,
-            productTitle: variant.product?.title || "Restocked Item",
-            variantTitle: variant.title || "Default Title",
+            productTitle: variant.product?.title || "",
+            variantTitle: variant.title || "",
             price: parseFloat(variant.price || "0"),
             imageUrl: normalized.isValid ? normalized.url : "",
             hasImage: normalized.isValid,
             rawImageUrl: rawUrl || undefined,
             imageLookupError: null,
+            isLookupFailed: false,
           };
         }
       } catch (err: any) {
@@ -236,12 +248,13 @@ export async function getLiveProductMedia(
         return {
           productId: productId || "",
           variantId: formattedVariantId,
-          productTitle: "Restocked Item",
-          variantTitle: "Default Title",
-          price: 0,
+          productTitle: "",
+          variantTitle: "",
+          price: undefined,
           imageUrl: "",
           hasImage: false,
           imageLookupError: `Lookup Exception: ${err.message}`,
+          isLookupFailed: true,
         };
       }
     }
@@ -299,12 +312,13 @@ export async function getLiveProductMedia(
           return {
             productId: formattedProductId,
             variantId: variantId || "",
-            productTitle: "Restocked Item",
-            variantTitle: "Default Title",
-            price: 0,
+            productTitle: "",
+            variantTitle: "",
+            price: undefined,
             imageUrl: "",
             hasImage: false,
             imageLookupError: statusText,
+            isLookupFailed: true,
           };
         }
 
@@ -321,12 +335,13 @@ export async function getLiveProductMedia(
           return {
             productId: formattedProductId,
             variantId: variantId || "",
-            productTitle: "Restocked Item",
-            variantTitle: "Default Title",
-            price: 0,
+            productTitle: "",
+            variantTitle: "",
+            price: undefined,
             imageUrl: "",
             hasImage: false,
             imageLookupError: `Shopify GraphQL Error: ${errMsg}`,
+            isLookupFailed: true,
           };
         }
 
@@ -352,13 +367,14 @@ export async function getLiveProductMedia(
           return {
             productId: prod.id,
             variantId: matchedVariant?.id || variantId || "",
-            productTitle: prod.title || "Restocked Item",
-            variantTitle: matchedVariant?.title || "Default Title",
+            productTitle: prod.title || "",
+            variantTitle: matchedVariant?.title || "",
             price: parseFloat(matchedVariant?.price || "0"),
             imageUrl: normalized.isValid ? normalized.url : "",
             hasImage: normalized.isValid,
             rawImageUrl: rawUrl || undefined,
             imageLookupError: null,
+            isLookupFailed: false,
           };
         }
       } catch (err: any) {
@@ -366,33 +382,35 @@ export async function getLiveProductMedia(
         return {
           productId: formattedProductId,
           variantId: variantId || "",
-          productTitle: "Restocked Item",
-          variantTitle: "Default Title",
-          price: 0,
+          productTitle: "",
+          variantTitle: "",
+          price: undefined,
           imageUrl: "",
           hasImage: false,
           imageLookupError: `Lookup Exception: ${err.message}`,
+          isLookupFailed: true,
         };
       }
     }
   }
 
-  // When no IDs provided or product genuinely not found in catalog, return null
   return null;
 }
 
 /**
  * Fetches the first twenty catalog products directly to capture all store inventory.
- * Removes rigid search filters (e.g. status:active) to avoid indexing lag or draft omissions.
- * Resolves media hierarchically: variant image -> featured image -> media nodes -> fallback.
- * Formats all media URLs with Shopify CDN width=300 transform parameter.
+ * Captures explicit error state (scope, authentication, API, network) so callers
+ * can inform the merchant accurately rather than reporting 0 products.
  */
-export async function getAllActiveCatalogProducts(
+export async function fetchCatalogProductsWithStatus(
   admin: AdminApiContext | any
-): Promise<CatalogProductOption[]> {
+): Promise<CatalogProductsResult> {
   if (!admin) {
-    console.warn("[GraphQL GetAllCatalogProducts]: Admin API context is undefined.");
-    return [];
+    return {
+      products: [],
+      error: "Admin API context is not authenticated.",
+      errorType: "AUTH_ERROR",
+    };
   }
 
   const query = `#graphql
@@ -431,11 +449,34 @@ export async function getAllActiveCatalogProducts(
   try {
     const response = await admin.graphql(query);
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
+      const errorText = typeof response.text === "function" ? await response.text().catch(() => "") : "";
       console.error(
         `[GraphQL GetAllCatalogProducts HTTP Error]: status=${response.status} ${response.statusText}`,
         errorText
       );
+      if (response.status === 401) {
+        return {
+          products: [],
+          error: "Shopify session is unauthenticated or expired. Please re-open the app from Shopify Admin.",
+          errorType: "AUTH_ERROR",
+        };
+      }
+      if (
+        response.status === 403 ||
+        errorText.toLowerCase().includes("scope") ||
+        errorText.toLowerCase().includes("access denied")
+      ) {
+        return {
+          products: [],
+          error: "Shopify API access denied. The app may be missing the read_products access scope.",
+          errorType: "SCOPE_ERROR",
+        };
+      }
+      return {
+        products: [],
+        error: `Shopify HTTP ${response.status} ${response.statusText}${errorText ? `: ${errorText.slice(0, 150)}` : ""}`,
+        errorType: "API_ERROR",
+      };
     }
 
     const json = await response.json();
@@ -447,6 +488,17 @@ export async function getAllActiveCatalogProducts(
           )}, extensions=${JSON.stringify(err.extensions || {})}`
         );
       }
+      const isScope = json.errors.some(
+        (e: any) =>
+          e.message?.toLowerCase().includes("scope") ||
+          e.message?.toLowerCase().includes("access denied") ||
+          e.extensions?.code === "ACCESS_DENIED"
+      );
+      return {
+        products: [],
+        error: json.errors.map((e: any) => e.message).join("; "),
+        errorType: isScope ? "SCOPE_ERROR" : "API_ERROR",
+      };
     }
 
     const products = json.data?.products?.nodes || [];
@@ -486,10 +538,10 @@ export async function getAllActiveCatalogProducts(
           variantTitle: "Default Title",
           price: 0,
           imageUrl: norm.isValid ? norm.url : "",
+          imageLookupError: !norm.isValid && productFallbackUrl ? norm.reason : null,
         });
       } else {
         for (const v of variants) {
-          // Priority: Variant image -> Featured image -> First media image -> Product fallback
           let rawUrl = v.image?.url || prod.featuredImage?.url || null;
           if (!rawUrl && prod.media?.nodes) {
             for (const node of prod.media.nodes) {
@@ -511,41 +563,58 @@ export async function getAllActiveCatalogProducts(
             variantTitle: v.title,
             price: parseFloat(v.price || "0"),
             imageUrl: norm.isValid ? norm.url : "",
+            imageLookupError: !norm.isValid && rawUrl ? norm.reason : null,
           });
         }
       }
     }
 
-    if (options.length > 0) {
-      return options;
-    }
+    return {
+      products: options,
+      error: null,
+      errorType: null,
+    };
   } catch (err: any) {
     console.error("[GraphQL GetAllCatalogProducts Exception]:", err?.message || err);
+    return {
+      products: [],
+      error: `Network or fetch exception: ${err?.message || String(err)}`,
+      errorType: "NETWORK_ERROR",
+    };
   }
+}
 
-  // Explicit empty array when store has no products; callers render empty state
-  return [];
+/**
+ * Backward-compatible helper returning the list of active catalog products.
+ */
+export async function getAllActiveCatalogProducts(
+  admin: AdminApiContext | any
+): Promise<CatalogProductOption[]> {
+  const result = await fetchCatalogProductsWithStatus(admin);
+  return result.products;
 }
 
 // Backward-compatible adapter for existing callers
 export async function getVariantProductMedia(
   admin: AdminApiContext | any,
   variantId: string
-): Promise<{ title: string; variantTitle: string; price: number; imageUrl: string }> {
+): Promise<{ title: string; variantTitle: string; price: number; imageUrl: string; isLookupFailed?: boolean }> {
   const media = await getLiveProductMedia(admin, variantId);
-  if (media) {
+  if (media && !media.isLookupFailed && media.productTitle) {
     return {
       title: media.productTitle,
       variantTitle: media.variantTitle,
-      price: media.price,
+      price: media.price ?? 0,
       imageUrl: media.imageUrl,
+      isLookupFailed: false,
     };
   }
   return {
-    title: "Restocked Item",
-    variantTitle: "Default Title",
+    title: "",
+    variantTitle: "",
     price: 0,
     imageUrl: "",
+    isLookupFailed: true,
   };
 }
 

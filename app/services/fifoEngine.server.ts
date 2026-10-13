@@ -258,19 +258,30 @@ export async function processInventoryRestock({
       }
     }
 
-    const rawImg = liveMedia?.imageUrl || sub.productImageUrl || undefined;
+    const hasLiveMedia = Boolean(liveMedia && !liveMedia.isLookupFailed && liveMedia.productTitle);
+    const resolvedTitle = hasLiveMedia ? liveMedia!.productTitle : sub.productTitle;
+    const resolvedVariant = (hasLiveMedia && liveMedia!.variantTitle && liveMedia!.variantTitle !== "Default Title")
+      ? liveMedia!.variantTitle
+      : sub.variantTitle;
+    const resolvedPrice = (hasLiveMedia && typeof liveMedia!.price === "number" && liveMedia!.price > 0)
+      ? liveMedia!.price
+      : (Number(sub.priceSnapshot) || 0);
+
+    const rawImg = (hasLiveMedia && liveMedia?.imageUrl) || sub.productImageUrl || undefined;
     const normalizedImg = normalizeShopifyImageUrl(rawImg, shop);
     const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
+    const imageLookupError = liveMedia?.imageLookupError || null;
 
     try {
       await sendRestockNotificationEmail({
         to: sub.customerEmail,
         shop,
-        productTitle: liveMedia?.productTitle || sub.productTitle,
-        variantTitle: liveMedia?.variantTitle || sub.variantTitle,
-        price: liveMedia?.price ?? (Number(sub.priceSnapshot) || 0),
-        variantId: liveMedia?.variantId || sub.variantId,
+        productTitle: resolvedTitle,
+        variantTitle: resolvedVariant,
+        price: resolvedPrice,
+        variantId: (hasLiveMedia && liveMedia?.variantId) || sub.variantId,
         productImageUrl: finalImageUrl,
+        imageLookupError,
         storeDisplayName: (settings as any).storeDisplayName || undefined,
         senderName: settings.senderName,
         subjectTemplate: settings.emailSubjectTemplate,
