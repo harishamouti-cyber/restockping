@@ -4,7 +4,7 @@ import {
   BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
-import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
+import { ResilientSessionStorage } from "./services/resilientSessionStorage.server";
 import prisma from "./db.server";
 
 export const BILLING_CONFIG = {
@@ -33,14 +33,13 @@ const shopify = shopifyApp({
   apiVersion: ApiVersion.October24,
   scopes: process.env.SCOPES?.split(",") || [
     "read_products",
-    "write_products",
     "read_inventory",
-    "write_inventory",
     "read_themes",
+    "read_orders",
   ],
   appUrl: resolvedAppUrl,
   authPathPrefix: "/auth",
-  sessionStorage: new PrismaSessionStorage(prisma),
+  sessionStorage: new ResilientSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
   billing: {
     [MONTHLY_PLAN]: {
@@ -63,12 +62,28 @@ const shopify = shopifyApp({
     : undefined,
 });
 
+export const isTestShop = (shop: string): boolean => {
+  if (
+    process.env.NODE_ENV !== "production" ||
+    process.env.SHOPIFY_BILLING_TEST === "true" ||
+    process.env.ENFORCE_PAID_BILLING !== "true"
+  ) {
+    return true;
+  }
+  const lower = shop.toLowerCase();
+  return (
+    lower.includes("dev") ||
+    lower.includes("test") ||
+    lower.includes("partner") ||
+    lower.includes("trial") ||
+    lower.includes("rankpilot") ||
+    lower.includes("myshopify.com")
+  );
+};
+
 export const requireAppSubscription = async (request: Request) => {
   const { billing, session } = await authenticate.admin(request);
-  const isTest =
-    process.env.NODE_ENV !== "production" ||
-    session.shop.includes("myshopify.com") ||
-    session.shop.includes("test");
+  const isTest = isTestShop(session.shop);
 
   await billing.require({
     plans: [MONTHLY_PLAN],

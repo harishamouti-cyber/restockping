@@ -78,19 +78,28 @@ export async function emitRestockFlowTrigger(
 
   const payload = {
     customer_email: customerEmail,
+    customerEmail: customerEmail,
     product_title: productTitle,
+    productTitle: productTitle,
     variant_title:
       variantTitle && variantTitle !== "Default Title"
         ? variantTitle
         : "Standard Edition",
+    variantTitle:
+      variantTitle && variantTitle !== "Default Title"
+        ? variantTitle
+        : "Standard Edition",
     product_price: formattedPrice,
+    productPrice: formattedPrice,
     checkout_permalink: checkoutPermalink,
+    checkoutPermalink: checkoutPermalink,
     product_id: String(productId),
+    productId: String(productId),
   };
 
   const response = await adminClient.graphql(FLOW_TRIGGER_RECEIVE_MUTATION, {
     variables: {
-      handle: "customer_ready_for_restock_alert",
+      handle: "customer-ready-for-restock-alert",
       payload,
     },
   });

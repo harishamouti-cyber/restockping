@@ -75,7 +75,7 @@ RestockPing is built to achieve 100% first-pass review compliance:
 | **X-Frame-Options Removal** | Safely deleted on embedded routes to eliminate framing denial | PASS |
 | **GDPR Webhook Endpoints** | HMAC SHA-256 verified `customers/data_request`, `customers/redact`, `shop/redact` | PASS |
 | **Clean App Uninstall** | `app/uninstalled` purges sessions and deactivates store settings | PASS |
-| **Minimal Scopes** | Only `read_products,write_products,read_inventory,write_inventory,read_themes` | PASS |
+| **Minimal Scopes** | Only `read_products,read_inventory,read_themes,read_orders` | PASS |
 | **Managed Billing** | 7-day trial, $9.99/mo plan, auto test-mode (`isTest: true`) for test/review stores | PASS |
 | **Public Legal Pages** | Polaris-styled `/privacy` and `/terms` routes | PASS |
 | **Zero Theme Pollution** | 100% Theme App Extension; zero modifications to `theme.liquid` | PASS |
@@ -89,9 +89,10 @@ RestockPing is built to achieve 100% first-pass review compliance:
 # 1. Install dependencies
 npm install
 
-# 2. Synchronize database schema
+# 2. Database setup (PostgreSQL)
+# Configure DATABASE_URL in .env (e.g. postgresql://user:password@localhost:5432/restockping)
 npx prisma generate
-npx prisma db push
+npx prisma migrate deploy
 
 # 3. Run pre-flight audit
 npm run audit

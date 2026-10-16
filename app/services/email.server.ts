@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import db from "../db.server";
 import { normalizeShopifyImageUrl } from "./catalog.server";
 import { sanitizeShopBrandName } from "../utils/brand";
@@ -34,6 +34,7 @@ export interface SendEmailParams {
   replyTo?: string;
   discountCode?: string;
   subscriptionId?: string;
+  isTestPreview?: boolean;
 }
 
 export type SendRestockEmailOptions = SendEmailParams;
@@ -66,7 +67,7 @@ export function getAppManagedSmtpConfig() {
 // Backward compatibility alias
 export const getSmtpConfig = getAppManagedSmtpConfig;
 
-let appTransporter: nodemailer.Transporter | null = null;
+let appTransporter: Transporter | null = null;
 
 function getAppManagedTransporter() {
   if (appTransporter) return appTransporter;
@@ -238,6 +239,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     discountCode: discountCode || undefined,
     checkoutUrl,
     unsubscribeUrl,
+    isTestPreview: params.isTestPreview,
   };
 
   const vars: TemplateVariables = {
@@ -254,6 +256,10 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
     vars,
   });
 
+  const finalSubject = params.isTestPreview
+    ? `[TEST PREVIEW] ${copy.subject.replace(/^\[TEST PREVIEW\]\s*/i, "")}`
+    : copy.subject;
+
   const html = renderHtmlEmail(renderInput);
   const text = renderPlainTextEmail(renderInput);
 
@@ -262,7 +268,7 @@ export async function sendRestockNotificationEmail(params: SendEmailParams) {
       from: `"${senderName}" <${fromAddress}>`,
       to,
       replyTo: params.replyTo || replyTo || fromAddress,
-      subject: copy.subject,
+      subject: finalSubject,
       text,
       html,
       headers: {

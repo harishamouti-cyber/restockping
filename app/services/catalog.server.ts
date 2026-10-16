@@ -403,7 +403,9 @@ export async function getLiveProductMedia(
  * can inform the merchant accurately rather than reporting 0 products.
  */
 export async function fetchCatalogProductsWithStatus(
-  admin: AdminApiContext | any
+  admin: AdminApiContext | any,
+  searchQuery?: string,
+  first = 50
 ): Promise<CatalogProductsResult> {
   if (!admin) {
     return {
@@ -413,41 +415,82 @@ export async function fetchCatalogProductsWithStatus(
     };
   }
 
-  const query = `#graphql
-    query getAllCatalogProducts {
-      products(first: 20) {
-        nodes {
-          id
-          title
-          featuredImage {
-            url
-          }
-          media(first: 5) {
-            nodes {
-              ... on MediaImage {
+  const hasSearch = Boolean(searchQuery && searchQuery.trim());
+  const cleanSearch = hasSearch ? searchQuery!.trim() : undefined;
+
+  const query = hasSearch
+    ? `#graphql
+      query getFilteredCatalogProducts($query: String!, $first: Int!) {
+        products(first: $first, query: $query) {
+          nodes {
+            id
+            title
+            featuredImage {
+              url
+            }
+            media(first: 5) {
+              nodes {
+                ... on MediaImage {
+                  image {
+                    url
+                  }
+                }
+              }
+            }
+            variants(first: 10) {
+              nodes {
+                id
+                title
+                price
                 image {
                   url
                 }
               }
             }
           }
-          variants(first: 10) {
-            nodes {
-              id
-              title
-              price
-              image {
-                url
+        }
+      }
+    `
+    : `#graphql
+      query getAllCatalogProducts($first: Int!) {
+        products(first: $first) {
+          nodes {
+            id
+            title
+            featuredImage {
+              url
+            }
+            media(first: 5) {
+              nodes {
+                ... on MediaImage {
+                  image {
+                    url
+                  }
+                }
+              }
+            }
+            variants(first: 10) {
+              nodes {
+                id
+                title
+                price
+                image {
+                  url
+                }
               }
             }
           }
         }
       }
-    }
-  `;
+    `;
+
+  const variables: Record<string, any> = { first };
+  if (hasSearch && cleanSearch) {
+    variables.query = cleanSearch;
+  }
 
   try {
-    const response = await admin.graphql(query);
+    const response = await admin.graphql(query, { variables });
     if (!response.ok) {
       const errorText = typeof response.text === "function" ? await response.text().catch(() => "") : "";
       console.error(

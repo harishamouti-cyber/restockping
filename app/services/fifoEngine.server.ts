@@ -249,8 +249,9 @@ export async function processInventoryRestock({
       const json = await response.json();
       const item = json.data?.inventoryItem;
 
-      if (item?.variant) {
-        resolvedVariantId = item.variant.id;
+      if (item?.variant?.id) {
+        const variantIdStr: string = item.variant.id;
+        resolvedVariantId = variantIdStr;
         const resolvedProductId = item.variant.product?.id || "";
         const resolvedSku = item.sku || null;
 
@@ -259,14 +260,14 @@ export async function processInventoryRestock({
           update: {
             shop,
             productId: resolvedProductId,
-            variantId: resolvedVariantId,
+            variantId: variantIdStr,
             sku: resolvedSku,
           },
           create: {
             inventoryItemId: gid,
             shop,
             productId: resolvedProductId,
-            variantId: resolvedVariantId,
+            variantId: variantIdStr,
             sku: resolvedSku,
           },
         });
@@ -274,7 +275,7 @@ export async function processInventoryRestock({
         await db.restockSubscription.updateMany({
           where: {
             shop,
-            variantId: resolvedVariantId,
+            variantId: variantIdStr,
             inventoryItemId: { startsWith: "mapped_" },
           },
           data: {
@@ -345,10 +346,18 @@ export async function processInventoryRestock({
       ? liveMedia!.price
       : (Number(sub.priceSnapshot) || 0);
 
-    const rawImg = (hasLiveMedia && liveMedia?.imageUrl) || sub.productImageUrl || undefined;
-    const normalizedImg = normalizeShopifyImageUrl(rawImg, shop);
-    const finalImageUrl = normalizedImg.isValid ? normalizedImg.url : undefined;
-    const imageLookupError = liveMedia?.imageLookupError || null;
+    // Resolve image from saved subscription first, then live Shopify product media if needed
+    let finalImageUrl: string | undefined = undefined;
+    const savedNorm = normalizeShopifyImageUrl(sub.productImageUrl, shop, 300);
+    if (savedNorm.isValid) {
+      finalImageUrl = savedNorm.url;
+    } else if (hasLiveMedia && liveMedia?.imageUrl) {
+      const liveNorm = normalizeShopifyImageUrl(liveMedia.imageUrl, shop, 300);
+      if (liveNorm.isValid) {
+        finalImageUrl = liveNorm.url;
+      }
+    }
+    const imageLookupError = !finalImageUrl ? (liveMedia?.imageLookupError || null) : null;
 
     // Atomically claim the subscription to prevent concurrent double-dispatch
     const claimResult = await db.restockSubscription.updateMany({

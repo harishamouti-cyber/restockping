@@ -44,6 +44,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       brandName: "Store",
       productTitle: "",
       token: "",
+      legacyId: "",
+      legacyShop: "",
     });
   }
 

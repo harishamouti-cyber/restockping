@@ -240,6 +240,7 @@ await (async () => {
     };
 
     const result = await getLiveProductMedia(mockAdminError, "gid://shopify/ProductVariant/12345");
+    assert.ok(result, "result should not be null");
     assert.equal(result.isLookupFailed, true, "isLookupFailed should be true");
     assert.equal(result.productTitle, "", "productTitle should be empty string (NOT 'Restocked Item')");
     assert.equal(result.price, undefined, "price should be undefined (NOT 0)");

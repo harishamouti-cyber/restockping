@@ -232,9 +232,11 @@ async function runTestSuite() {
     const resB = await getLiveProductMedia(admin, "202");
 
     assert(
-      resA?.imageUrl.includes("prod_a.jpg") &&
-      resB?.imageUrl.includes("prod_b.jpg") &&
-      resA?.productTitle !== resB?.productTitle,
+      Boolean(
+        resA?.imageUrl?.includes("prod_a.jpg") &&
+        resB?.imageUrl?.includes("prod_b.jpg") &&
+        resA?.productTitle !== resB?.productTitle
+      ),
       "Scenario 5: Exact ID isolation prevents cross-pollination between products with similar titles",
       `ID 201 -> ${resA?.imageUrl} vs ID 202 -> ${resB?.imageUrl}`
     );

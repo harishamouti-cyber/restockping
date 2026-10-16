@@ -4,7 +4,7 @@ client_id = "bb3d7694aa9a53e849de71dc2f2806fa"
 name = "RestockPing"
 application_url = "https://restockping.vercel.app"
 embedded = true
-handle = "restockping"
+handle = "restockping-back-in-stock"
 
 [build]
 automatically_update_urls_on_dev = true
@@ -17,17 +17,20 @@ api_version = "2024-10"
   uri = "/webhooks"
   topics = [
     "app/uninstalled",
-    "inventory_levels/update",
+    "inventory_levels/update"
+  ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks"
+  compliance_topics = [
     "customers/data_request",
     "customers/redact",
-    "shop/redact",
-    "orders/create",
-    "orders/paid"
+    "shop/redact"
   ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_products,read_themes,write_inventory,write_products,read_orders"
+scopes = "read_inventory,read_products,read_themes,read_orders"
 
 [auth]
 redirect_urls = [

@@ -9,6 +9,7 @@ import {
   verifyVariantOwnership,
 } from "../services/proxySecurity.server";
 import { normalizeShopifyImageUrl } from "../services/catalog.server";
+import { sanitizeShopBrandName } from "../utils/brand";
 
 // CORS headers for App Proxy responses
 function getCorsHeaders() {
@@ -22,37 +23,45 @@ function getCorsHeaders() {
 export async function loader({ request }: LoaderFunctionArgs) {
   const corsHeaders = getCorsHeaders();
 
-  if (request.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const url = new URL(request.url);
-  const shop = (url.searchParams.get("shop") || "").trim().toLowerCase();
-
-  // Validate shop domain format
-  if (shop && validateShopDomain(shop)) {
-    const settings = await db.restockSettings.findUnique({ where: { shop } });
-    if (settings) {
-      return json(
-        {
-          status: "RestockPing App Proxy Active",
-          buttonText: settings.storefrontButtonText || "Notify Me When Available",
-          successMessage:
-            settings.storefrontSuccessMessage ||
-            "You're on the waitlist! We'll email you the moment stock returns.",
-          buttonRadius: settings.storefrontButtonRadius ?? 6,
-          accentColor: settings.accentColor || "#008060",
-        },
-        { headers: corsHeaders }
-      );
+  try {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
     }
-  }
 
-  return json({ status: "RestockPing App Proxy Active" }, { headers: corsHeaders });
+    const url = new URL(request.url);
+    const shop = (url.searchParams.get("shop") || "").trim().toLowerCase();
+
+    // Validate shop domain format
+    if (shop && validateShopDomain(shop)) {
+      const settings = await db.restockSettings.findUnique({ where: { shop } });
+      if (settings) {
+        return json(
+          {
+            status: "RestockPing App Proxy Active",
+            buttonText: settings.storefrontButtonText || "Notify Me When Available",
+            successMessage:
+              settings.storefrontSuccessMessage ||
+              "You're on the waitlist! We'll email you the moment stock returns.",
+            buttonRadius: settings.storefrontButtonRadius ?? 6,
+            accentColor: settings.accentColor || "#008060",
+          },
+          { headers: corsHeaders }
+        );
+      }
+    }
+
+    return json({ status: "RestockPing App Proxy Active" }, { headers: corsHeaders });
+  } catch (err) {
+    const errorType = err instanceof Error ? err.name : "UnknownError";
+    console.error("[RestockPing AppProxy Loader Error]", errorType);
+    return json({ status: "RestockPing App Proxy Active" }, { headers: corsHeaders });
+  }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const corsHeaders = getCorsHeaders();
+
+  try {
 
   if (request.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -134,16 +143,28 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  // Verify the shop has an active installed app session
-  const activeSession = await db.session.findFirst({
-    where: { shop },
-  });
+  // Verify the shop has an active installed app session or settings record
+  const [activeSession, existingSettings] = await Promise.all([
+    db.session.findFirst({ where: { shop } }),
+    db.restockSettings.findUnique({ where: { shop } }),
+  ]);
 
-  if (!activeSession) {
-    return json(
-      { success: false, error: "Store not registered or app session inactive." },
-      { status: 404, headers: corsHeaders }
-    );
+  if (!activeSession && !existingSettings) {
+    // If shop domain is valid and signature was verified by Shopify App Proxy, auto-provision settings
+    if (signature || !isProduction) {
+      await db.restockSettings.create({
+        data: {
+          shop,
+          senderName: "Fulfillment Center",
+          storeDisplayName: sanitizeShopBrandName(shop),
+        },
+      }).catch(() => {});
+    } else {
+      return json(
+        { success: false, error: "Store not registered or app session inactive." },
+        { status: 404, headers: corsHeaders }
+      );
+    }
   }
 
   // 6. Strict Server-Side Email Address Validation
@@ -247,4 +268,34 @@ export async function action({ request }: ActionFunctionArgs) {
     { success: true, message: successMessage },
     { headers: corsHeaders }
   );
+  } catch (error: unknown) {
+    const url = new URL(request.url);
+    const rawShop = url.searchParams.get("shop") || "unknown";
+    const safeShop = rawShop.replace(/[^a-zA-Z0-9.-]/g, "");
+
+    const errObj = error instanceof Error ? error : new Error(String(error));
+    // Redact potential customer emails, secrets, and signatures from server logs
+    const safeMsg = (errObj.message || "Unknown error")
+      .replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, "[REDACTED_EMAIL]")
+      .replace(/secret=[^&\s]+/gi, "secret=[REDACTED]")
+      .replace(/signature=[^&\s]+/gi, "signature=[REDACTED]");
+
+    console.error("[RestockPing AppProxy Subscribe Action Error]", {
+      shop: safeShop,
+      type: errObj.name,
+      message: safeMsg,
+    });
+
+    return json(
+      {
+        success: false,
+        error: "We couldn't save your request right now. Please try again in a moment.",
+      },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+export function ErrorBoundary() {
+  return null;
 }

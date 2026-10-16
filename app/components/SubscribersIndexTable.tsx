@@ -17,6 +17,12 @@ export interface SubscriberItem {
 interface SubscribersIndexTableProps {
   subscribers: SubscriberItem[];
   shop: string;
+  page?: number;
+  totalPages?: number;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  onPrevious?: () => void;
+  onNext?: () => void;
   onDispatchSingle: (id: string) => void;
   onBulkDispatch?: (ids: string[]) => void;
   onBulkDelete: (ids: string[]) => void;
@@ -26,6 +32,12 @@ interface SubscribersIndexTableProps {
 export function SubscribersIndexTable({
   subscribers,
   shop,
+  page,
+  totalPages,
+  hasPrevious,
+  hasNext,
+  onPrevious,
+  onNext,
   onDispatchSingle,
   onBulkDispatch,
   onBulkDelete,
@@ -155,6 +167,17 @@ export function SubscribersIndexTable({
           { title: "Date registered" },
           { title: "Actions", alignment: "end" },
         ]}
+        pagination={
+          totalPages && totalPages > 1
+            ? {
+                hasPrevious: Boolean(hasPrevious),
+                hasNext: Boolean(hasNext),
+                onPrevious: onPrevious || (() => {}),
+                onNext: onNext || (() => {}),
+                label: page ? `Page ${page} of ${totalPages}` : undefined,
+              }
+            : undefined
+        }
       >
         {rowMarkup}
       </IndexTable>

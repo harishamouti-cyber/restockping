@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSubmit, useActionData, useNavigation } from "@remix-run/react";
+import { useLoaderData, useSubmit, useActionData, useNavigation, useRouteError } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendRestockNotificationEmail } from "../services/email.server";
@@ -10,156 +10,224 @@ import { renderEmailCopy, type TemplateVariables } from "../utils/emailTemplate"
 import { encryptCredential } from "../services/crypto.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
+  let shop = "";
+  try {
+    const { admin, session } = await authenticate.admin(request);
+    shop = session.shop;
+    const url = new URL(request.url);
+    const productSearch = url.searchParams.get("productSearch") || "";
 
-  const [settingsRecord, catalogResult, waitlistSample] = await Promise.all([
-    db.restockSettings.findUnique({ where: { shop } }),
-    fetchCatalogProductsWithStatus(admin),
-    db.restockSubscription.findFirst({
-      where: { shop },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+    const [settingsRecord, catalogResult, waitlistSample] = await Promise.all([
+      db.restockSettings.findUnique({ where: { shop } }).catch((err) => {
+        console.error("[Settings Loader DB Error - Settings]:", err?.message || err);
+        return null;
+      }),
+      fetchCatalogProductsWithStatus(admin, productSearch || undefined, 50).catch((err) => {
+        console.error("[Settings Loader Catalog Query Error]:", err?.message || err);
+        return {
+          products: [],
+          error: `Catalog query exception: ${err?.message || String(err)}`,
+          errorType: "API_ERROR" as const,
+        };
+      }),
+      db.restockSubscription.findFirst({
+        where: { shop },
+        orderBy: { createdAt: "desc" },
+      }).catch((err) => {
+        console.error("[Settings Loader DB Error - Waitlist]:", err?.message || err);
+        return null;
+      }),
+    ]);
 
-  const sanitizedDefault = sanitizeShopBrandName(shop);
+    const sanitizedDefault = sanitizeShopBrandName(shop);
 
-  // Brand sanitization logic:
-  // If settingsRecord has a storeDisplayName that is empty or contains raw dev suffixes/hashes,
-  // sanitize it into clean title case (e.g. "RankPilot")
-  let effectiveStoreDisplayName = sanitizedDefault;
-  if (settingsRecord?.storeDisplayName && !isRawDevBrand(settingsRecord.storeDisplayName, shop)) {
-    effectiveStoreDisplayName = settingsRecord.storeDisplayName.trim();
-  }
+    // Brand sanitization logic:
+    // If settingsRecord has a storeDisplayName that is empty or contains raw dev suffixes/hashes,
+    // sanitize it into clean title case (e.g. "RankPilot")
+    let effectiveStoreDisplayName = sanitizedDefault;
+    if (settingsRecord?.storeDisplayName && !isRawDevBrand(settingsRecord.storeDisplayName, shop)) {
+      effectiveStoreDisplayName = settingsRecord.storeDisplayName.trim();
+    }
 
-  const activeSettings = settingsRecord || {
-    storeDisplayName: effectiveStoreDisplayName,
-    dripBatchMultiplier: 2.5,
-    dripIntervalMinutes: 120,
-    minRestockThreshold: 1,
-    accentColor: "#008060",
-    senderName: "Fulfillment Center",
-    incentiveDiscountCode: "",
-    emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
-    emailHeadline: "Your item is back in stock",
-    emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
-    emailButtonText: "Claim In-Stock Item →",
-    storefrontButtonText: "Notify Me When Available",
-    storefrontSuccessMessage: "You're on the waitlist! We'll email you the moment stock returns.",
-    storefrontButtonRadius: 6,
-  };
-
-  const hasRealCatalogProducts = catalogResult.products.length > 0;
-  const isWaitlistFallback = !hasRealCatalogProducts && Boolean(waitlistSample);
-
-  let catalogProducts: CatalogProductOption[] = catalogResult.products;
-  if (isWaitlistFallback && waitlistSample) {
-    catalogProducts = [
-      {
-        productId: waitlistSample.productId,
-        variantId: waitlistSample.variantId,
-        productTitle: waitlistSample.productTitle || "Waitlist Item",
-        variantTitle: waitlistSample.variantTitle || "Default Title",
-        price: waitlistSample.priceSnapshot || 0,
-        imageUrl: waitlistSample.productImageUrl || "",
-      },
-    ];
-  }
-
-  const isSampleCatalog = catalogProducts.length === 0;
-
-  // Set default selected item to the first product with a valid image (e.g. snowboard)
-  const defaultPreview: CatalogProductOption =
-    catalogProducts.find((product) => Boolean(product.imageUrl && product.imageUrl.trim())) ||
-    catalogProducts[0] || {
-      productId: "",
-      variantId: "",
-      productTitle: "No Shopify products available",
-      variantTitle: "Add a product to preview its real image",
-      price: 0,
-      imageUrl: "",
+    const activeSettings = {
+      storeDisplayName: effectiveStoreDisplayName,
+      dripBatchMultiplier: settingsRecord?.dripBatchMultiplier ?? 2.5,
+      dripIntervalMinutes: settingsRecord?.dripIntervalMinutes ?? 120,
+      minRestockThreshold: settingsRecord?.minRestockThreshold ?? 1,
+      accentColor: settingsRecord?.accentColor || "#008060",
+      senderName: settingsRecord?.senderName || "Fulfillment Center",
+      incentiveDiscountCode: settingsRecord?.incentiveDiscountCode || "",
+      emailSubjectTemplate: settingsRecord?.emailSubjectTemplate || "Back in Stock: {{product_title}} is ready to ship",
+      emailHeadline: settingsRecord?.emailHeadline || "Your item is back in stock",
+      emailBodyText: settingsRecord?.emailBodyText || "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+      emailButtonText: settingsRecord?.emailButtonText || "Claim In-Stock Item →",
+      storefrontButtonText: settingsRecord?.storefrontButtonText || "Notify Me When Available",
+      storefrontSuccessMessage: settingsRecord?.storefrontSuccessMessage || "You're on the waitlist! We'll email you the moment stock returns.",
+      storefrontButtonRadius: settingsRecord?.storefrontButtonRadius ?? 6,
+      emailDeliveryMode: settingsRecord?.emailDeliveryMode || "APP_MANAGED",
+      replyToEmail: settingsRecord?.replyToEmail || "",
+      customSmtpHost: settingsRecord?.customSmtpHost || "",
+      customSmtpPort: settingsRecord?.customSmtpPort ?? 587,
+      customSmtpUser: settingsRecord?.customSmtpUser || "",
+      hasCustomSmtpPass: Boolean(settingsRecord?.customSmtpEncryptedPass),
     };
 
-  return json({
-    settings: {
-      ...activeSettings,
-      storeDisplayName: effectiveStoreDisplayName,
-      incentiveDiscountCode: (activeSettings as any).incentiveDiscountCode || "",
-      emailButtonText: activeSettings.emailButtonText || "Claim In-Stock Item →",
-      emailDeliveryMode: (activeSettings as any).emailDeliveryMode || "APP_MANAGED",
-      replyToEmail: (activeSettings as any).replyToEmail || "",
-      customSmtpHost: (activeSettings as any).customSmtpHost || "",
-      customSmtpPort: (activeSettings as any).customSmtpPort || 587,
-      customSmtpUser: (activeSettings as any).customSmtpUser || "",
-      hasCustomSmtpPass: Boolean((activeSettings as any).customSmtpEncryptedPass),
-    },
-    shop,
-    previewItem: defaultPreview,
-    catalogProducts,
-    hasRealCatalogProducts,
-    catalogError: catalogResult.error,
-    catalogErrorType: catalogResult.errorType,
-    isWaitlistFallback,
-    isSampleCatalog,
-    defaultRecipient: "",
-  });
+    const hasRealCatalogProducts = catalogResult.products.length > 0;
+    const isWaitlistFallback = !hasRealCatalogProducts && Boolean(waitlistSample);
+
+    let catalogProducts: CatalogProductOption[] = catalogResult.products;
+    if (isWaitlistFallback && waitlistSample) {
+      catalogProducts = [
+        {
+          productId: waitlistSample.productId,
+          variantId: waitlistSample.variantId,
+          productTitle: waitlistSample.productTitle || "Waitlist Item",
+          variantTitle: waitlistSample.variantTitle || "Default Title",
+          price: Number(waitlistSample.priceSnapshot) || 0,
+          imageUrl: waitlistSample.productImageUrl || "",
+        },
+      ];
+    }
+
+    const isSampleCatalog = catalogProducts.length === 0;
+
+    // Set default selected item to the first product with a valid image (e.g. snowboard)
+    const defaultPreview: CatalogProductOption =
+      catalogProducts.find((product) => Boolean(product.imageUrl && product.imageUrl.trim())) ||
+      catalogProducts[0] || {
+        productId: "",
+        variantId: "",
+        productTitle: "No Shopify products available",
+        variantTitle: "Add a product to preview its real image",
+        price: 0,
+        imageUrl: "",
+      };
+
+    return json({
+      settings: activeSettings,
+      shop,
+      previewItem: defaultPreview,
+      catalogProducts,
+      hasRealCatalogProducts,
+      catalogError: catalogResult.error,
+      catalogErrorType: catalogResult.errorType,
+      isWaitlistFallback,
+      isSampleCatalog,
+      productSearch,
+      defaultRecipient: "",
+      loaderError: null,
+    });
+  } catch (loaderErr: any) {
+    if (loaderErr instanceof Response) {
+      throw loaderErr;
+    }
+    console.error("[Settings Loader Unexpected Error]:", loaderErr?.message || loaderErr);
+    const sanitizedDefault = sanitizeShopBrandName(shop || "Store");
+    return json({
+      settings: {
+        storeDisplayName: sanitizedDefault,
+        dripBatchMultiplier: 2.5,
+        dripIntervalMinutes: 120,
+        minRestockThreshold: 1,
+        accentColor: "#008060",
+        senderName: "Fulfillment Center",
+        incentiveDiscountCode: "",
+        emailSubjectTemplate: "Back in Stock: {{product_title}} is ready to ship",
+        emailHeadline: "Your item is back in stock",
+        emailBodyText: "Good news! An item you requested is available again. Complete your order now before inventory runs out.",
+        emailButtonText: "Claim In-Stock Item →",
+        storefrontButtonText: "Notify Me When Available",
+        storefrontSuccessMessage: "You're on the waitlist! We'll email you the moment stock returns.",
+        storefrontButtonRadius: 6,
+        emailDeliveryMode: "APP_MANAGED",
+        replyToEmail: "",
+        customSmtpHost: "",
+        customSmtpPort: 587,
+        customSmtpUser: "",
+        hasCustomSmtpPass: false,
+      },
+      shop: shop || "unknown.myshopify.com",
+      previewItem: {
+        productId: "",
+        variantId: "",
+        productTitle: "No Shopify products available",
+        variantTitle: "Add a product to preview its real image",
+        price: 0,
+        imageUrl: "",
+      },
+      catalogProducts: [],
+      hasRealCatalogProducts: false,
+      catalogError: "Database or Shopify session is currently recovering.",
+      catalogErrorType: "API_ERROR" as const,
+      isWaitlistFallback: false,
+      isSampleCatalog: true,
+      productSearch: "",
+      defaultRecipient: "",
+      loaderError: String(loaderErr?.message || "Unexpected loader error"),
+    });
+  }
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const formData = await request.formData();
-  const intent = formData.get("intent");
+  try {
+    const { admin, session } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const intent = formData.get("intent");
 
-  if (intent === "SEND_TEST_EMAIL") {
-    const targetEmail = String(formData.get("testEmail") || "").trim();
-    if (!targetEmail || !targetEmail.includes("@")) {
-      return json({ success: false, error: "Please enter a valid email address." }, { status: 400 });
+    if (intent === "SEND_TEST_EMAIL") {
+      const targetEmail = String(formData.get("testEmail") || "").trim();
+      if (!targetEmail || !targetEmail.includes("@")) {
+        return json({ success: false, error: "Please enter a valid email address." }, { status: 400 });
+      }
+
+      try {
+        const selectedVariantId = String(formData.get("previewVariantId") || "");
+        const previewTitle = String(formData.get("previewProductTitle") || "");
+        const previewVariantTitle = String(formData.get("previewVariantTitle") || "");
+        const previewPrice = parseFloat(String(formData.get("previewPrice") || "0")) || 0;
+        const previewImageUrl = String(formData.get("previewImageUrl") || "");
+
+        // Look up live product details from Admin API
+        const liveProduct = selectedVariantId ? await getLiveProductMedia(admin, selectedVariantId) : null;
+
+        // Pass selected product data with safe fallback: never overwrite valid preview with dummy failure placeholders
+        const hasLiveMedia = Boolean(liveProduct && !liveProduct.isLookupFailed && liveProduct.productTitle);
+        const finalProductTitle = (hasLiveMedia ? liveProduct?.productTitle : previewTitle) || previewTitle || "Restocked Item";
+        const finalVariantTitle = (hasLiveMedia ? liveProduct?.variantTitle : previewVariantTitle) || previewVariantTitle || "Default Title";
+        const finalPrice = (hasLiveMedia && liveProduct?.price !== undefined) ? liveProduct.price : previewPrice;
+        const finalVariantId = (hasLiveMedia && liveProduct?.variantId) ? liveProduct.variantId : selectedVariantId;
+        const finalImageUrl = (hasLiveMedia && liveProduct?.imageUrl) ? liveProduct.imageUrl : (previewImageUrl || undefined);
+        const imageLookupError = liveProduct?.imageLookupError;
+
+        await sendRestockNotificationEmail({
+          to: targetEmail,
+          shop: session.shop,
+          storeDisplayName: String(formData.get("storeDisplayName") || ""),
+          productTitle: finalProductTitle,
+          variantTitle: finalVariantTitle,
+          price: finalPrice,
+          variantId: finalVariantId,
+          productImageUrl: finalImageUrl,
+          imageLookupError,
+          senderName: String(formData.get("senderName") || "Restock Alerts"),
+          headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
+          bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
+          buttonText: String(formData.get("emailButtonText") || "Claim In-Stock Item →"),
+          buttonColor: String(formData.get("accentColor") || "#008060"),
+          subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
+          discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
+          replyTo: String(formData.get("replyToEmail") || "").trim() || undefined,
+          isTestPreview: true,
+        });
+        return json({
+          success: true,
+          message: `Test email preview for "${finalProductTitle}" (${finalVariantTitle}) sent to ${targetEmail}.`,
+        });
+      } catch (err: any) {
+        console.error("[Test Send Error]:", err?.message || err);
+        return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
+      }
     }
-
-    try {
-      const selectedVariantId = String(formData.get("previewVariantId") || "");
-      const previewTitle = String(formData.get("previewProductTitle") || "");
-      const previewVariantTitle = String(formData.get("previewVariantTitle") || "");
-      const previewPrice = parseFloat(String(formData.get("previewPrice") || "0"));
-      const previewImageUrl = String(formData.get("previewImageUrl") || "");
-
-      // Look up live product details from Admin API
-      const liveProduct = selectedVariantId ? await getLiveProductMedia(admin, selectedVariantId) : null;
-
-      // Pass selected product data with safe fallback: never overwrite valid preview with dummy failure placeholders
-      const hasLiveMedia = Boolean(liveProduct && !liveProduct.isLookupFailed && liveProduct.productTitle);
-      const finalProductTitle = (hasLiveMedia ? liveProduct?.productTitle : previewTitle) || previewTitle || "Restocked Item";
-      const finalVariantTitle = (hasLiveMedia ? liveProduct?.variantTitle : previewVariantTitle) || previewVariantTitle || "Default Title";
-      const finalPrice = (hasLiveMedia && liveProduct?.price !== undefined) ? liveProduct.price : previewPrice;
-      const finalVariantId = (hasLiveMedia && liveProduct?.variantId) ? liveProduct.variantId : selectedVariantId;
-      const finalImageUrl = (hasLiveMedia && liveProduct?.imageUrl) ? liveProduct.imageUrl : (previewImageUrl || undefined);
-      const imageLookupError = liveProduct?.imageLookupError;
-
-      await sendRestockNotificationEmail({
-        to: targetEmail,
-        shop: session.shop,
-        storeDisplayName: String(formData.get("storeDisplayName") || ""),
-        productTitle: finalProductTitle,
-        variantTitle: finalVariantTitle,
-        price: finalPrice,
-        variantId: finalVariantId,
-        productImageUrl: finalImageUrl,
-        imageLookupError,
-        senderName: String(formData.get("senderName") || "Restock Alerts"),
-        headline: String(formData.get("emailHeadline") || "Your item is back in stock"),
-        bodyText: String(formData.get("emailBodyText") || "Good news! An item you requested is available again. Complete your order now before inventory runs out."),
-        buttonText: String(formData.get("emailButtonText") || "Claim In-Stock Item →"),
-        buttonColor: String(formData.get("accentColor") || "#008060"),
-        subjectTemplate: String(formData.get("emailSubjectTemplate") || "Back in Stock: {{product_title}} is ready to ship"),
-        discountCode: String(formData.get("incentiveDiscountCode") || "").trim() || undefined,
-        replyTo: String(formData.get("replyToEmail") || "").trim() || undefined,
-      });
-      return json({ success: true, message: `Test email for "${finalProductTitle}" sent to ${targetEmail}.` });
-    } catch (err: any) {
-      console.error("[Test Send Error]:", err);
-      return json({ success: false, error: `Delivery failed: ${err.message}` }, { status: 400 });
-    }
-  }
 
   // Save Settings
   const storeDisplayName = String(formData.get("storeDisplayName") || "").trim();
@@ -225,6 +293,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   return json({ success: true, message: "Settings saved successfully." });
+  } catch (actionErr: any) {
+    if (actionErr instanceof Response) {
+      throw actionErr;
+    }
+    console.error("[Settings Action Error]:", actionErr?.message || actionErr);
+    return json(
+      { success: false, error: `Action failed: ${actionErr?.message || "Please try again."}` },
+      { status: 500 }
+    );
+  }
 };
 
 export default function Settings() {
@@ -239,13 +317,14 @@ export default function Settings() {
     isWaitlistFallback,
     isSampleCatalog,
     defaultRecipient,
-  } = useLoaderData<typeof loader>();
+    loaderError,
+  } = useLoaderData<typeof loader>() as any;
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
 
-  const [formState, setFormState] = useState(settings);
-  const [testEmail, setTestEmail] = useState(defaultRecipient);
+  const [formState, setFormState] = useState(settings || {});
+  const [testEmail, setTestEmail] = useState(defaultRecipient || "");
   const [selectedPreviewVariantId, setSelectedPreviewVariantId] = useState<string>(
     previewItem?.variantId || catalogProducts?.[0]?.variantId || ""
   );
@@ -260,8 +339,19 @@ export default function Settings() {
     setImgLoadError(false);
   }, [selectedPreviewVariantId]);
 
+  const fallbackPreview: CatalogProductOption = {
+    productId: "",
+    variantId: "",
+    productTitle: "No Shopify products available",
+    variantTitle: "Default Title",
+    price: 0,
+    imageUrl: "",
+  };
+
   const activePreviewItem: CatalogProductOption =
-    (catalogProducts || []).find((p) => p.variantId === selectedPreviewVariantId) || previewItem;
+    (catalogProducts || []).find((p: any) => p.variantId === selectedPreviewVariantId) ||
+    previewItem ||
+    fallbackPreview;
 
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
 
@@ -278,7 +368,7 @@ export default function Settings() {
   useEffect(() => {
     if (actionData?.success && (actionData as any).message) {
       showToast((actionData as any).message);
-    } else if (actionData?.error) {
+    } else if ((actionData as any)?.error) {
       showToast((actionData as any).error, true);
     }
   }, [actionData]);
@@ -380,11 +470,11 @@ export default function Settings() {
     fd.append("replyToEmail", formState.replyToEmail || "");
     fd.append("emailDeliveryMode", formState.emailDeliveryMode || "APP_MANAGED");
     // Real selected catalog product parameters
-    fd.append("previewProductTitle", activePreviewItem.productTitle);
-    fd.append("previewVariantTitle", activePreviewItem.variantTitle);
-    fd.append("previewPrice", String(activePreviewItem.price));
-    fd.append("previewVariantId", activePreviewItem.variantId);
-    fd.append("previewImageUrl", activePreviewItem.imageUrl || "");
+    fd.append("previewProductTitle", activePreviewItem?.productTitle || "Product");
+    fd.append("previewVariantTitle", activePreviewItem?.variantTitle || "Default Title");
+    fd.append("previewPrice", String(Number(activePreviewItem?.price) || 0));
+    fd.append("previewVariantId", activePreviewItem?.variantId || "");
+    fd.append("previewImageUrl", activePreviewItem?.imageUrl || "");
     submit(fd, { method: "POST" });
   };
 
@@ -404,9 +494,9 @@ export default function Settings() {
     headlineTemplate: formState.emailHeadline,
     bodyTemplate: formState.emailBodyText,
     variables: {
-      product_title: activePreviewItem.productTitle,
-      variant_title: activePreviewItem.variantTitle,
-      price: activePreviewItem.price,
+      product_title: activePreviewItem?.productTitle || "Product",
+      variant_title: activePreviewItem?.variantTitle || "Default Title",
+      price: Number(activePreviewItem?.price) || 0,
       store: displayBrand,
     },
   });
@@ -427,6 +517,25 @@ export default function Settings() {
       )}
 
       <main className="max-w-[1240px] mx-auto px-4 py-4 space-y-3.5">
+        {/* Diagnostic Loader Warning Banner */}
+        {loaderError && (
+          <div className="p-3 bg-[#fff4e5] border border-[#f5b854] rounded-lg flex items-center justify-between shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+            <div className="flex items-center gap-2">
+              <span className="text-base text-[#b98900]">⚠️</span>
+              <span className="text-xs font-medium text-[#202223]">
+                <strong>Configuration Notice:</strong> Database or catalog connection is currently recovering. Safe defaults have been loaded.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-2.5 py-1 text-xs font-semibold bg-white border border-[#d2d5d8] rounded text-[#202223] hover:bg-[#f6f6f7] transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Unsaved Changes Banner */}
         {isDirty && (
           <div className="p-3 bg-[#fff5ea] border border-[#f5b854] rounded-lg flex items-center justify-between shadow-[0_1px_0_rgba(0,0,0,0.05)]">
@@ -884,9 +993,9 @@ export default function Settings() {
                     }}
                     className="w-full sm:w-auto flex-1 min-w-0 px-2 py-1 text-xs bg-white border border-[#d2d5d8] rounded-md focus:outline-none focus:border-[#008060] text-[#202223] truncate"
                   >
-                    {(catalogProducts || []).map((p) => (
+                    {((catalogProducts || []) as CatalogProductOption[]).map((p: CatalogProductOption) => (
                       <option key={p.variantId} value={p.variantId}>
-                        {p.productTitle} — {p.variantTitle} (${p.price.toFixed(2)})
+                        {p.productTitle} — {p.variantTitle} (${(Number(p.price) || 0).toFixed(2)})
                       </option>
                     ))}
                     {catalogProducts.length === 0 && (
@@ -1090,7 +1199,7 @@ export default function Settings() {
                             {activePreviewItem.variantTitle}
                           </span>
                           <span className="text-xs font-bold text-[#111827]">
-                            ${activePreviewItem.price.toFixed(2)}
+                            ${(Number(activePreviewItem?.price) || 0).toFixed(2)}
                           </span>
                         </div>
                         {activePreviewItem.imageUrl && !imgLoadError ? (
@@ -1172,7 +1281,7 @@ export default function Settings() {
                       </h3>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="text-sm font-semibold text-[#111827]">
-                          ${activePreviewItem.price.toFixed(2)}
+                          ${(Number(activePreviewItem?.price) || 0).toFixed(2)}
                         </span>
                         <span className="px-2 py-0.5 bg-[#fef2f2] text-[#b91c1c] text-[10px] font-semibold rounded">
                           Sold out
@@ -1246,6 +1355,57 @@ export default function Settings() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const rawMsg =
+    error instanceof Error
+      ? error.message
+      : (error as any)?.data?.message || (error as any)?.message || String(error || "An unexpected error occurred in Settings.");
+
+  const sanitizedMessage = rawMsg
+    .replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, "[REDACTED_EMAIL]")
+    .replace(/shpat_[a-zA-Z0-9]+/g, "[REDACTED_TOKEN]")
+    .replace(/secret=[^&\s]+/gi, "secret=[REDACTED]")
+    .replace(/signature=[^&\s]+/gi, "signature=[REDACTED]");
+
+  console.error("[Settings Route ErrorBoundary Caught]:", {
+    type: error instanceof Error ? error.name : typeof error,
+    message: sanitizedMessage,
+  });
+
+  return (
+    <div className="min-h-screen bg-[#f1f2f4] p-6 font-sans text-[#202223] antialiased">
+      <div className="max-w-[760px] mx-auto bg-white border border-[#e1e3e5] rounded-xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center gap-2.5 text-[#d72c0d]">
+          <span className="text-xl">⚠️</span>
+          <h2 className="text-base font-bold">RestockPing Settings Notice</h2>
+        </div>
+        <p className="text-xs text-[#6d7175] leading-relaxed">
+          The settings interface encountered an issue connecting to Shopify Admin or the database. All subscriber waitlists, alert queues, and existing configurations remain intact.
+        </p>
+        <div className="p-3 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-xs text-[#991b1b] font-mono break-words">
+          {sanitizedMessage}
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-xs font-semibold text-white bg-[#008060] hover:bg-[#006e52] rounded-md transition-colors cursor-pointer shadow-xs"
+          >
+            Reload Settings
+          </button>
+          <a
+            href="/app"
+            className="px-4 py-2 text-xs font-medium text-[#202223] bg-white border border-[#d2d5d8] rounded-md hover:bg-[#f6f6f7] transition-colors"
+          >
+            Return to Overview
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

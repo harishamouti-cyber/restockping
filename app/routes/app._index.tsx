@@ -7,18 +7,20 @@ import { calculateConversionMetrics } from "../services/fifoEngine.server";
 import { TopDemandProducts, type ProductDemand } from "../components/TopDemandProducts";
 import { LivePipelineNodes } from "../components/LivePipelineNodes";
 import { openThemeEditor, getThemeEditorUrl } from "../utils/themeDeepLink";
+import { checkThemeAppBlockActivation, type ThemeActivationStatus } from "../services/themeInspection.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
   try {
-    const [settingsRecord, subscribers] = await Promise.all([
+    const [settingsRecord, subscribers, themeActivation] = await Promise.all([
       db.restockSettings.findUnique({ where: { shop } }),
       db.restockSubscription.findMany({
         where: { shop },
         orderBy: { createdAt: "desc" },
       }),
+      checkThemeAppBlockActivation(admin),
     ]);
 
     const settings = settingsRecord || {
@@ -65,6 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       metrics,
       totalPotentialRevenue,
       topDemandList,
+      themeActivation,
     });
   } catch (err) {
     console.error("[app._index loader error]:", err);
@@ -87,12 +90,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       },
       totalPotentialRevenue: 0,
       topDemandList: [] as ProductDemand[],
+      themeActivation: {
+        isActivated: false,
+        themeName: null,
+        themeId: null,
+        verified: false,
+      } as ThemeActivationStatus,
     });
   }
 };
 
 export default function RestockOverview() {
-  const { shop, settings, metrics, totalPotentialRevenue, topDemandList } =
+  const { shop, settings, metrics, totalPotentialRevenue, topDemandList, themeActivation } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
@@ -135,8 +144,9 @@ export default function RestockOverview() {
     } catch {}
   };
 
-  const isStep1Done = metrics.totalRegistered > 0;
-  const isStep2Done = Boolean(settings?.storeDisplayName || (settings as any)?.incentiveDiscountCode);
+  const isThemeConnected = Boolean(themeActivation?.isActivated || metrics.totalRegistered > 0);
+  const isStep1Done = isThemeConnected;
+  const isStep2Done = Boolean((settings as any)?.storeDisplayName || (settings as any)?.incentiveDiscountCode);
   const isStep3Done = metrics.dispatchedCount > 0;
   const completedSteps = [isStep1Done, isStep2Done, isStep3Done].filter(Boolean).length;
 
@@ -153,13 +163,21 @@ export default function RestockOverview() {
         {/* Compact Status Banner (Matches Analytics Filter Bar) */}
         <div className="bg-white border border-[#e1e3e5] rounded-lg px-3.5 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.05)] flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#008060] shrink-0" />
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                isThemeConnected ? "bg-[#008060]" : "bg-[#b98900]"
+              }`}
+            />
             <span className="text-xs font-semibold text-[#202223]">
-              Automatic restock alerts active
+              {isThemeConnected
+                ? "Automatic restock alerts active"
+                : "Setup required: Add app block to theme"}
             </span>
             <span className="text-[#8c9196] text-xs">·</span>
             <span className="text-xs text-[#616161]">
-              Connected to store inventory ({multiplier}x cohort pacing)
+              {isThemeConnected
+                ? `Connected to ${themeActivation?.themeName || "theme"} (${multiplier}x cohort pacing)`
+                : "Theme block not detected on published theme. Enable in Theme Editor to collect signups."}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -245,7 +263,7 @@ export default function RestockOverview() {
                     </span>
                     {isStep1Done ? (
                       <span className="text-[10px] font-semibold text-[#008060] bg-[#e3f1df] px-1.5 py-0.5 rounded">
-                        ✓ Active
+                        {themeActivation?.isActivated ? `✓ Active on ${themeActivation.themeName || "theme"}` : "✓ Active"}
                       </span>
                     ) : (
                       <span className="text-[10px] font-medium text-[#002b66] bg-[#dbeafe] px-1.5 py-0.5 rounded">

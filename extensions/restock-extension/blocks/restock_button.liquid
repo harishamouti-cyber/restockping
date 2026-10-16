@@ -9,8 +9,10 @@
 {% assign featured_image_url = '' %}
 {% if raw_img %}
   {% assign featured_image_url = raw_img | image_url: width: 600 %}
-  {% if featured_image_url contains '//' and featured_image_url contains 'https:' == false %}
-    {% assign featured_image_url = 'https:' | append: featured_image_url %}
+  {% if featured_image_url contains '//' %}
+    {% unless featured_image_url contains 'https:' %}
+      {% assign featured_image_url = 'https:' | append: featured_image_url %}
+    {% endunless %}
   {% endif %}
 {% endif %}
 
@@ -62,6 +64,7 @@
       <input
         type="email"
         name="restock_email"
+        aria-label="{{ block.settings.input_placeholder | default: 'Email address for restock alert' }}"
         placeholder="{{ block.settings.input_placeholder | default: 'Enter your email address' }}"
         required
         autocomplete="email"
@@ -79,11 +82,12 @@
           font-family: inherit;
         "
       />
-      <input type="text" name="b_identifier_hp" style="display:none !important;" tabindex="-1" autocomplete="off" />
+      <input type="text" name="b_identifier_hp" style="display:none !important;" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
       <button
         type="button"
         data-restockping-submit
+        aria-label="{{ block.settings.heading_text | default: 'Notify Me When Available' }}"
         style="
           width: 100%;
           min-height: 46px;
@@ -105,7 +109,7 @@
       </button>
     </form>
 
-    <div class="restockping-feedback" style="display: none; font-size: 13px; margin-top: 10px; font-weight: 500; font-family: inherit;"></div>
+    <div class="restockping-feedback" role="status" aria-live="polite" style="display: none; font-size: 13px; margin-top: 10px; font-weight: 500; font-family: inherit;"></div>
   </div>
 </div>
 

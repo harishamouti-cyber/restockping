@@ -1,41 +1,42 @@
 name = "Customer Ready for Restock Alert"
 type = "flow_trigger"
-handle = "customer_ready_for_restock_alert"
+handle = "customer-ready-for-restock-alert"
 description = "Emitted by RestockPing when an out-of-stock item is replenished and a queued customer is ready for a restock notification."
+uid = "9d0ac988-178a-506e-b3b7-5aa91802c33eae944f34"
 
 [settings]
 [[settings.fields]]
-key = "customer_email"
+key = "customerEmail"
 name = "Customer Email"
 description = "Email address of the customer waiting for restock"
 type = "email"
 
 [[settings.fields]]
-key = "product_title"
+key = "productTitle"
 name = "Product Title"
 description = "Title of the restocked product"
 type = "single_line_text_field"
 
 [[settings.fields]]
-key = "variant_title"
+key = "variantTitle"
 name = "Variant Title"
 description = "Title of the restocked variant"
 type = "single_line_text_field"
 
 [[settings.fields]]
-key = "product_price"
+key = "productPrice"
 name = "Product Price"
 description = "Price of the restocked item"
 type = "single_line_text_field"
 
 [[settings.fields]]
-key = "checkout_permalink"
+key = "checkoutPermalink"
 name = "Checkout Permalink"
 description = "Direct 1-Click checkout link with item and customer email pre-filled"
 type = "url"
 
 [[settings.fields]]
-key = "product_id"
+key = "productId"
 name = "Product ID"
 description = "Shopify Product ID or GID"
 type = "single_line_text_field"

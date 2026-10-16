@@ -19,6 +19,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const statusParam = url.searchParams.get("status") || "ALL";
   const queryParam = url.searchParams.get("q") || "";
+  const pageParam = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+  const pageSize = 25;
   const isExport = url.searchParams.get("export") === "csv";
 
   try {
@@ -32,17 +34,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ];
     }
 
-    // Direct Supplier Demand CSV Export
+    // Direct Supplier Demand CSV Export with Formula Injection Sanitization
     if (isExport) {
       const exportSubs = await db.restockSubscription.findMany({
         where: whereClause,
         orderBy: { createdAt: "desc" },
       });
 
-      const escapeCsvCell = (val: unknown): string => {
+      // Neutralize spreadsheet formula injection characters (=, +, -, @, \t, \r)
+      const sanitizeCsvCell = (val: unknown): string => {
         if (val === null || val === undefined) return '""';
-        const str = String(val).replace(/"/g, '""');
-        return `"${str}"`;
+        let str = String(val);
+        if (/^[=+\-@\t\r]/.test(str)) {
+          str = `'${str}`;
+        }
+        return `"${str.replace(/"/g, '""')}"`;
       };
 
       const headers = [
@@ -58,15 +64,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ];
 
       const csvRows = exportSubs.map((s) => [
-        escapeCsvCell(s.customerEmail || "Anonymous"),
-        escapeCsvCell(s.productTitle),
-        escapeCsvCell(s.variantTitle),
-        escapeCsvCell(s.variantId),
-        escapeCsvCell(s.priceSnapshot),
-        escapeCsvCell(s.status),
-        escapeCsvCell(s.createdAt ? new Date(s.createdAt).toISOString() : ""),
-        escapeCsvCell(s.dispatchedAt ? new Date(s.dispatchedAt).toISOString() : ""),
-        escapeCsvCell(s.convertedAt ? new Date(s.convertedAt).toISOString() : ""),
+        sanitizeCsvCell(s.customerEmail || "Anonymous"),
+        sanitizeCsvCell(s.productTitle),
+        sanitizeCsvCell(s.variantTitle),
+        sanitizeCsvCell(s.variantId),
+        sanitizeCsvCell(s.priceSnapshot),
+        sanitizeCsvCell(s.status),
+        sanitizeCsvCell(s.createdAt ? new Date(s.createdAt).toISOString() : ""),
+        sanitizeCsvCell(s.dispatchedAt ? new Date(s.dispatchedAt).toISOString() : ""),
+        sanitizeCsvCell(s.convertedAt ? new Date(s.convertedAt).toISOString() : ""),
       ].join(","));
 
       const csvContent = [headers.join(","), ...csvRows].join("\r\n");
@@ -83,11 +89,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       });
     }
 
-    const [subscribers, totalCount, pendingCount, dispatchedCount, convertedCount, settings] = await Promise.all([
+    const [subscribers, filteredCount, totalCount, pendingCount, dispatchedCount, convertedCount, settings] = await Promise.all([
       db.restockSubscription.findMany({
         where: whereClause,
         orderBy: { createdAt: "desc" },
+        skip: (pageParam - 1) * pageSize,
+        take: pageSize,
       }),
+      db.restockSubscription.count({ where: whereClause }),
       db.restockSubscription.count({ where: { shop: session.shop } }),
       db.restockSubscription.count({ where: { shop: session.shop, status: "PENDING" } }),
       db.restockSubscription.count({
@@ -105,12 +114,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       db.restockSettings.findUnique({ where: { shop: session.shop } }),
     ]);
 
+    const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+
     return json({
       subscribers: subscribers || [],
       totalCount: totalCount || 0,
+      filteredCount: filteredCount || 0,
       pendingCount: pendingCount || 0,
       dispatchedCount: dispatchedCount || 0,
       convertedCount: convertedCount || 0,
+      page: pageParam,
+      totalPages,
+      pageSize,
       incentiveDiscountCode: settings?.incentiveDiscountCode || null,
       statusParam,
       queryParam,
@@ -121,9 +136,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({
       subscribers: [],
       totalCount: 0,
+      filteredCount: 0,
       pendingCount: 0,
       dispatchedCount: 0,
       convertedCount: 0,
+      page: 1,
+      totalPages: 1,
+      pageSize: 25,
       incentiveDiscountCode: null,
       statusParam,
       queryParam,
@@ -402,9 +421,13 @@ export default function SubscribersPage() {
   const {
     subscribers,
     totalCount,
+    filteredCount,
     pendingCount,
     dispatchedCount,
     convertedCount,
+    page,
+    totalPages,
+    pageSize,
     incentiveDiscountCode,
     statusParam,
     queryParam,
@@ -431,10 +454,16 @@ export default function SubscribersPage() {
   useEffect(() => {
     if (actionData?.success && (actionData as any).message) {
       showToast((actionData as any).message);
-    } else if (actionData?.error) {
+    } else if ((actionData as any)?.error) {
       showToast((actionData as any).error, true);
     }
   }, [actionData]);
+
+  const handlePageChange = (newPage: number) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("page", String(newPage));
+    setSearchParams(next);
+  };
 
   const handleSearchChange = (val: string) => {
     setSearchValue(val);
@@ -442,6 +471,7 @@ export default function SubscribersPage() {
       const next = new URLSearchParams(searchParams);
       if (val) next.set("q", val);
       else next.delete("q");
+      next.delete("page");
       setSearchParams(next);
     });
   };
@@ -450,6 +480,7 @@ export default function SubscribersPage() {
     const next = new URLSearchParams(searchParams);
     if (status === "ALL") next.delete("status");
     else next.set("status", status);
+    next.delete("page");
     setSearchParams(next);
   };
 
@@ -675,6 +706,12 @@ export default function SubscribersPage() {
             <SubscribersIndexTable
               subscribers={subscribers}
               shop={shop}
+              page={page}
+              totalPages={totalPages}
+              hasPrevious={page > 1}
+              hasNext={page < totalPages}
+              onPrevious={() => handlePageChange(page - 1)}
+              onNext={() => handlePageChange(page + 1)}
               onDispatchSingle={handleDispatchSingle}
               onBulkDispatch={handleBulkDispatch}
               onBulkDelete={handleBulkDelete}

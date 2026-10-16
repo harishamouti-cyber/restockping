@@ -128,6 +128,7 @@ export interface EmailRenderInput {
   discountCode?: string;
   checkoutUrl: string;
   unsubscribeUrl: string;
+  isTestPreview?: boolean;
 }
 
 /**
@@ -153,7 +154,18 @@ export function renderPlainTextEmail(input: EmailRenderInput): string {
       ? ` (${input.variantTitle})`
       : "";
 
-  const lines = [
+  const lines: string[] = [];
+
+  if (input.isTestPreview) {
+    lines.push("================================================================================");
+    lines.push(`[TEST NOTIFICATION PREVIEW]`);
+    lines.push(`Product: ${input.productTitle}${variantDisplay}`);
+    lines.push(`Delivered via RestockPing Settings test dispatch.`);
+    lines.push("================================================================================");
+    lines.push("");
+  }
+
+  lines.push(
     `${input.storeDisplayName} - Restock Notice`,
     "=".repeat(`${input.storeDisplayName} - Restock Notice`.length),
     "",
@@ -166,8 +178,8 @@ export function renderPlainTextEmail(input: EmailRenderInput): string {
     `Price: ${formatTemplatePrice(input.price) || "$0.00"}`,
     "",
     `Claim item & complete checkout:`,
-    input.checkoutUrl,
-  ];
+    input.checkoutUrl
+  );
 
   if (input.discountCode) {
     lines.push("");
@@ -281,6 +293,23 @@ export function renderHtmlEmail(input: EmailRenderInput): string {
       <tr>
         <td align="center">
           <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:540px;background-color:#ffffff;border:1px solid #e1e3e5;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            ${
+              input.isTestPreview
+                ? `<tr>
+                    <td style="padding:14px 32px 0 32px;">
+                      <div style="background-color:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;text-align:left;">
+                        <div style="font-size:12px;font-weight:700;color:#1e40af;display:flex;align-items:center;gap:6px;">
+                          <span>🧪</span>
+                          <span>Test Notification Preview</span>
+                        </div>
+                        <div style="font-size:11px;color:#1e3a8a;margin-top:2px;line-height:1.4;">
+                          Testing restock alert template using <strong>${safeProductTitle}</strong>${safeVariantTitle !== "Default Title" ? ` (${safeVariantTitle})` : ""}. No real inventory changes occurred.
+                        </div>
+                      </div>
+                    </td>
+                  </tr>`
+                : ""
+            }
             <tr>
               <td style="padding:32px 32px 16px 32px;">
                 <div style="display:inline-block;padding:3px 8px;background-color:#e3f1df;border-radius:4px;font-size:11px;font-weight:600;color:#008060;text-transform:uppercase;letter-spacing:0.04em;">
